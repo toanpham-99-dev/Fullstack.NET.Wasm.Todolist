@@ -1,0 +1,224 @@
+﻿@page "/gantt";
+@using System.Text.Json
+@inject IJSRuntime js
+@inject IGanttChart GanttChartService
+@inject IAuthService AuthService
+@inject NavigationManager NavManager
+@inject IStringLocalizer<Resource> localizer
+@inject ILocalStorageService localStorageService
+@inject IBoard BoardService
+
+
+<div class="row mb-3" style="margin:5px">
+    <div class="col">
+        <h4>
+            <i class="fa  fa-bar-chart"></i> &nbsp; @localizer["Gantt Chart"]
+        </h4>
+    </div>
+    <hr />
+</div>
+
+@if (UserProjects is not null && UserProjects.Count > 0)
+{
+    <div class="row">
+        <div class="col-md-1">
+            <label>@localizer["Project List"]:</label>
+        </div>
+        <div class="col-md-11">
+            <CheckBoxList Data="@UserProjects"
+                          TextField="@((item)=>item.Name)"
+                          ValueField="@((item)=>item.Id)"
+                          SelectedValues="@SelectedIds"
+                          OnValueChange="RefreshGrid" />
+        </div>
+    </div>
+}
+
+<div class="gantt-container">
+    <div class="gantt_control">
+        @localizer["Filter Tasks"]: <input id='filter' type='text' style='width:150px' />
+        <input type=button value="@localizer["Collapse"]" onclick=collapseAll()>
+        <input type=button value="@localizer["Expanse"]" onclick=expandAll()>
+        <button class='zoom_toggle' onclick="toggleMode(this)">@localizer["Zoom to Fit"]</button>
+        <input type=button value="@localizer["Zoom In"]" onclick="zoom_in();">
+        <input type=button value="@localizer["Zoom Out"]" onclick="zoom_out();">
+        <input type=button onclick=exportData() value="@localizer["Export"]" />
+    </div>
+    <div id="gantt_here" style='width:100%; height:700px; position: relative;'></div>
+</div>
+
+@code {
+    /// <summary>
+    /// PreloadService
+    /// </summary>
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    /// <summary>
+    /// SelectedIds
+    /// </summary>
+    protected List<string> SelectedIds = new List<string>();
+
+    /// <summary>
+    /// OutPutValue
+    /// </summary>
+    public string OutPutValue { get; set; } = string.Empty;
+
+    /// <summary>
+    /// UserProjects
+    /// </summary>
+    private List<BoardDTO> UserProjects = new List<BoardDTO>();
+
+    /// <summary>
+    /// GanttChartResponse
+    /// </summary>
+    private GanttChartResponse Data = new();
+
+    /// <summary>
+    /// GanttJsUrl
+    /// </summary>
+    private string GanttJsUrl = string.Empty;
+
+    /// <summary>
+    /// Culture
+    /// </summary>
+    public string Culture = string.Empty;
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+        ShowSpinner();
+        GetQueryString();
+        InitGantt();
+        await GetListBoardAsync();
+        await GetGanttDataAsync();
+        HideSpinner();
+    }
+
+    /// <summary>
+    /// InitGantt
+    /// </summary>
+    /// <returns></returns>
+    private void InitGantt()
+    {
+        if (Culture == "en-US")
+        {
+            GanttJsUrl = "../js/GanttEn.js";
+        }
+        else
+        {
+            GanttJsUrl = "../js/GanttVi.js";
+        }
+    }
+
+    /// <summary>
+    /// InitGantt
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetCulture()
+    {
+        Culture = (await localStorageService.GetItemAsStringAsync("culture"))!;
+    }
+
+    /// <summary>
+    /// GetQueryString
+    /// </summary>
+    private void GetQueryString()
+    {
+        NavManager.TryGetQueryString<string>(nameof(Culture), out Culture);
+    }
+
+    /// <summary>
+    /// OnParametersSetAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnParametersSetAsync()
+    {
+        await FillDataAsync();
+    }
+
+    /// <summary>
+    /// GetGanttDataAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetGanttDataAsync()
+    {
+        List<Guid> guids = new List<Guid>();
+        if (UserProjects is not null && UserProjects.Count > 0)
+        {
+            guids = UserProjects.Select(_ => _.Id).ToList();
+        }
+        Data = await GanttChartService.GetDataAsync(guids, Culture);
+    }
+
+    /// <summary>
+    /// FillDataAsync
+    /// </summary>
+    /// <returns></returns>
+    async Task FillDataAsync()
+    {
+        string data = JsonSerializer.Serialize(Data, new JsonSerializerOptions
+            {
+                DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = true
+            });
+        await js.InvokeAsync<string>("loadGanttContent", data, true);
+    }
+
+    /// <summary>
+    /// GetListBoardAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetListBoardAsync()
+    {
+        GetBoardsResponse response = await BoardService.GetListAsync(new GetBoardsDTO());
+        UserProjects.AddRange(response.Boards);
+        SelectedIds = UserProjects.Select(_ => _.Id.ToString()).ToList();
+    }
+
+    /// <summary>
+    ///RefreshGrid
+    /// </summary>
+    private async Task RefreshGrid()
+    {
+        List<Guid> formatedIds = new List<Guid>();
+        SelectedIds.ForEach(_ => formatedIds.Add(new Guid(_)));
+        Data = await GanttChartService.GetDataAsync(formatedIds, Culture);
+        await FillDataAsync();
+        Console.WriteLine("Child component button clicked!");
+    }
+
+    /// <summary>
+    /// ShowSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void ShowSpinner()
+    {
+        PreloadService.Show(SpinnerColor.Light);
+    }
+
+    /// <summary>
+    /// HideSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void HideSpinner()
+    {
+        PreloadService.Hide();
+    }
+}
+<script src="@GanttJsUrl"></script>
+<script>
+    window.loadGanttContent = (data, clearAll) => {
+        if (clearAll) {
+            gantt.clearAll();
+        }
+        gantt.parse(data);
+    };
+</script>

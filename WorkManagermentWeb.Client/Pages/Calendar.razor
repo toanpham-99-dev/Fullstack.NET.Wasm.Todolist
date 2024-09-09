@@ -1,0 +1,107 @@
+﻿@page "/calendar"
+@inject NavigationManager NavManager
+@inject IJSRuntime js
+@inject IStringLocalizer<Resource> localizer
+@inject IAuthService AuthService
+@inject ICalendar calendarService
+@inject ILocalStorageService localStorageService
+@inject IMicrosoftCalendarService microsoftCalendarService
+@inject IUser userService
+
+<CustomAuthorized>
+    <div class="row" style="margin:5px">
+        <div class="col">
+            <h4>
+                <i class="fa fa-calendar"></i> &nbsp; @localizer["Calendar"]
+            </h4>
+        </div>
+        <hr />
+    </div>
+    <div class="row calendar-container">
+        <div id='calendar'></div>
+    </div>
+</CustomAuthorized>
+<CustomNotAuthorized>
+    <p>@localizer["Sorry, you need to login Microsoft to access this feature."]</p>
+</CustomNotAuthorized>
+
+@code {
+    /// <summary>
+    /// Culture
+    /// </summary>
+    /// <returns></returns>
+    private string Culture = string.Empty;
+
+    /// <summary>
+    /// User
+    /// </summary>
+    private UserDTO User = new();
+
+    /// <summary>
+    /// Events
+    /// </summary>
+    private List<Application.DTOs.CalendarEventDTO> Events = new List<Application.DTOs.CalendarEventDTO>();
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            return;
+        }
+        await GetCulture();
+        await GetUser();
+        await GetAllEvents();
+        await LoadEvents();
+    }
+
+    /// <summary>
+    /// GetUser
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetUser()
+    {
+        var response = await userService.GetByIdAsync(AuthService.User.Id)
+            .ConfigureAwait(false);
+        if (response is not null)
+        {
+            User = response.User!;
+        }
+    }
+
+    /// <summary>
+    /// GetAllEvents
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetAllEvents()
+    {
+        var response = await calendarService.GetEventsByUser(new GetEventsDTO()
+            {
+                UserId = User.Id
+            }).ConfigureAwait(false);
+        if (response is not null)
+        {
+            Events.AddRange(response.Events);
+        }
+    }
+
+    /// <summary>
+    /// InitGantt
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetCulture()
+    {
+        Culture = (await localStorageService.GetItemAsStringAsync("culture"))!;
+    }
+    /// <summary>
+    /// SetupCalendar
+    /// </summary>
+    /// <returns></returns>
+    async Task LoadEvents()
+    {
+        await js.InvokeAsync<string>("CalendarFunctions.initCalendar", Culture, Events);
+    }
+}

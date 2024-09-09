@@ -1,0 +1,222 @@
+﻿@page "/login"
+@inject NavigationManager NavManager
+@using Blazored.LocalStorage
+@using WorkManagermentWeb.Client.Authentication
+@using Microsoft.AspNetCore.Components.Authorization
+@using WorkManagermentWeb.Application.Contracts
+@using WorkManagermentWeb.Application.DTOs
+@inject IStringLocalizer<Resource> localizer
+@inject ILocalStorageService localStorageService
+@inject IUser UserService
+@inject IAuthService AuthService
+@inject IJSRuntime js
+
+<div class="container" style="min-height: 611px; width:377px">
+    <div class="row">
+        <div class="col">
+            <EditForm Enhance Model="UserDTO" OnValidSubmit="HandleLogin">
+                <DataAnnotationsValidator />
+                <div class="card">
+                    <div class="card-header"><p class="mt-3 fw-bold text-center">@localizer["Log in to continue"]</p></div>
+                    <div class="card-body">
+                        <div class="form-group mb-3 mt-3">
+                            <FloatingText @bind-Value="UserDTO.Email"
+                                          class="form-control"
+                                          Type="email"
+                                          Placeholder="Email Address"
+                                          Label="Email" />
+                           <ValidationMessage For="()=>UserDTO.Email" />
+                        </div>
+                        <div class="form-group mb-3">
+                            <FloatingText class="form-control"
+                                          Type="@(ShowPassword is true? "text":"password")"
+                                          @bind-Value="UserDTO.Password"
+                                          Placeholder="@localizer["Password"]"
+                                          Label="@localizer["Password"]">
+                            </FloatingText>
+                            <ValidationMessage For="()=>UserDTO.Password" />
+                        </div>
+                        @* <div class="mb-3">
+                            <input class="form-check-input"
+                                   style="height:17px; width:17px"
+                                   type="checkbox"
+                                   id="flexCheckIndeterminate"
+                                   checked=@ShowPassword
+                                   @onchange="eventArgs => { CheckboxClicked(eventArgs.Value!); }">
+                            <label class="ms-1 fw-bold" style="margin-top: 1px">@localizer["Show Password"]</label>
+                        </div> *@
+                        
+                        <p><a class="pe-auto" href="/forgot-password">@localizer["Forgot password"]</a></p>
+                        <div class="form-group mb-4">
+                            <div class="d-grid gap-2">
+                                <Button @ref="LoginBtn" class="btn btn-primary"
+                                        Type="ButtonType.Submit">
+                                    <Icon Name="IconName.DoorOpenFill" /> @localizer["Login"]
+                                </Button>
+                            </div>
+                        </div>
+                        <div class="form-group mb-2">
+                            <p class="text-center">@localizer["Or coutinue with:"]</p>
+                        </div>
+                        
+                        <div class="d-grid gap-2 mb-3">
+                            <Button Type="ButtonType.Button" Color="ButtonColor.Secondary" @onclick="NavToMSLogin">
+                                <img src="../ms.svg" style="margin-bottom:2px" width="17" height="17" /> @localizer["Sign-in with Microsoft"]
+                            </Button>
+                        </div>
+                        <p class="text-center"><a class="pe-auto" href="/register">@localizer["Create an account"]</a></p>
+                    </div>
+            </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+<Modal @ref="Modal" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer[ModalMessage]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">✖ @localizer["Close"]</Button>
+    </FooterTemplate>
+</Modal>
+@code {
+    /// <summary>
+    /// MyApp
+    /// </summary>
+    [CascadingParameter] public App MyApp { get; set; } = new();
+
+    /// <summary>
+    /// User
+    /// </summary>
+    public LoginDTO UserDTO { get; set; } = new();
+
+    /// <summary>
+    /// LoginBtn
+    /// </summary>
+    private Button LoginBtn = default!;
+
+    /// <summary>
+    /// ShowPassword
+    /// </summary>
+    public bool ShowPassword { get; set; }
+
+    /// <summary>
+    /// ModalMessage
+    /// </summary>
+    private string ModalMessage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Modal
+    /// </summary>
+    private Modal Modal = default!;
+
+    /// <summary>
+    /// User
+    /// </summary>
+    private ClaimsPrincipal? User = new();
+
+    /// <summary>
+    /// Response
+    /// </summary>
+    private GenerateTokenResponse Response = new(false, string.Empty);
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        MyApp.SetLayout(typeof(EmptyLayout));
+        if (AuthService.User is not null &&
+            AuthService.IsAuthenticated == true)
+        {
+            await AuthService.UpdateAuthenticationState(null!);
+            // switch (AuthService.Type)
+            // {
+            //     case AuthenticationTypes.Password:
+            //         await OriginClearToken();
+            //         break;
+            //     case AuthenticationTypes.Negotiate:
+            //         MSLogout();
+            //         break;
+            // }
+        }
+    }
+
+    /// <summary>
+    /// OriginClearToken
+    /// </summary>
+    /// <returns></returns>
+    private async Task OriginClearToken()
+    {
+        if (AuthService.User is not null)
+        {
+            await AuthService.UpdateAuthenticationState(null!);
+        }
+    }
+
+    /// <summary>
+    /// CheckboxClicked
+    /// </summary>
+    /// <param name="isChecked"></param>
+    public void CheckboxClicked(object isChecked) => ShowPassword = !ShowPassword;
+
+    /// <summary>
+    /// MSLogout
+    /// </summary>
+    /// <returns></returns>
+    private void MSLogout()
+    {
+        NavManager.NavigateTo("authentication/logout");
+    }
+
+    /// <summary>
+    /// OnShowModalClick
+    /// </summary>
+    /// <returns></returns>
+    private async Task OnShowModalClick()
+    {
+        await Modal.ShowAsync();
+    }
+
+    /// <summary>
+    /// OnHideModalClick
+    /// </summary>
+    /// <returns></returns>
+    private async Task OnHideModalClick()
+    {
+        await Modal.HideAsync();
+    }
+
+    /// <summary>
+    /// HandleLogin
+    /// </summary>
+    /// <returns></returns>
+    async Task HandleLogin()
+    {
+        LoginBtn.ShowLoading(@localizer["Loading"]);
+        Response = await UserService.LoginAsync(UserDTO);
+        if (Response.Flag)
+        {
+            User = new();
+
+            await AuthService.UpdateAuthenticationState(Response.Token);
+            NavManager.NavigateTo("/projects", forceLoad: true);
+        }
+        else
+        {
+            ModalMessage = Response.Message;
+            await OnShowModalClick();
+        }
+        LoginBtn.HideLoading();
+        return;
+    }
+
+    /// <summary>
+    /// NavToMSLogin
+    /// </summary>
+    private void NavToMSLogin()
+    {
+        NavManager.NavigateTo("authentication/login");
+    }
+}

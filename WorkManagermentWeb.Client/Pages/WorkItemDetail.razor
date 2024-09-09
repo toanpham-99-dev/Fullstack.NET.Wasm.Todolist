@@ -1,0 +1,1014 @@
+﻿@page "/task/{Id:guid}"
+@inject NavigationManager NavManager
+@inject IWorkItem WorkItemService
+@inject IUser UserService
+@inject IAuthService AuthService
+@inject IStringLocalizer<Resource> localizer
+@inject IJSRuntime js
+@inject IMicrosoftCalendarService microsoftCalendarService
+
+<div class="row" style="margin:5px">
+    <div class="col">
+        <h4>
+            <i class="fa fa-tasks"></i> &nbsp; @localizer["Task Details"]
+        </h4>
+    </div>
+    <hr />
+</div>
+<Modal @ref="UpdateWorkItemModal" Size="ModalSize.ExtraLarge"
+       OnShowing="()=>OnShowingModal(UpdateWorkItemModal)" IsVerticallyCentered="true">
+    <HeaderTemplate>🖌 @localizer["Update Task"]</HeaderTemplate>
+    <BodyTemplate>
+        <EditForm Model="PostPutWorkItemDTO" Enhance OnValidSubmit="HandleSaveChangeAsync">
+            <DataAnnotationsValidator />
+            <div class="form-group mb-3">
+                <div class="row">
+                    <div class="col-md-9">
+                        <div class="mb-3">
+                            <FloatingText class="form-control"
+                                          Type="text"
+                                          @bind-Value="PostPutWorkItemDTO.Title"
+                                          Placeholder="@localizer["Title"]"
+                                          Label="@localizer["Title"]">
+                            </FloatingText>
+                            <ValidationMessage For="()=>PostPutWorkItemDTO.Title" />
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <FloatingText class="form-control"
+                                          Type="text"
+                                          @bind-Value="PostPutWorkItemDTO.WorkRemain"
+                                          Placeholder="@localizer["Duration"]"
+                                          Label="@localizer["Duration"]">
+                            </FloatingText>
+                            <ValidationMessage For="()=>PostPutWorkItemDTO.WorkRemain" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group mb-3">
+                <div class="row">
+                    <div class="col">
+                        <div class="mb-3">
+                            <div class="input-wrap">
+                                <label>@localizer["Start Date - End Date"]</label>
+                                <div class="daterange">
+                                    <DateRangePicker @bind-StartDate="PostPutWorkItemDTO.StartDate" @bind-EndDate="PostPutWorkItemDTO.EndDate" DateFormat="dd/MM/yyyy" />
+                                </div>
+                            </div>
+                            <ValidationMessage For="()=>PostPutWorkItemDTO.StartDate" />
+                            <ValidationMessage For="()=>PostPutWorkItemDTO.EndDate" />
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-3">
+                            <div class="input-wrap">
+                                <label>@localizer["Parent Work Item"]</label>
+                                <AutoComplete @bind-Value="ParentCodeDisplayString"
+                                              TItem="WorkItemDTO"
+                                              DataProvider="WorkItemDataProvider"
+                                              PropertyName="@nameof(WorkItemDTO.Code)"
+                                              Placeholder="@localizer["Parent Code"]"
+                                              OnChanged="(WorkItemDTO SelectedWorkItem) => OnParentChanged(SelectedWorkItem)" />
+                            </div>
+                            <ValidationMessage For="()=>PostPutWorkItemDTO.ParentWorkItemCode" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group mb-3">
+                <div class="row">
+                    <div class="col">
+                        <div class="input-wrap">
+                            <label>@localizer["Priority"]</label>
+                            <select class="form-select" @bind="PostPutWorkItemDTO!.Priority">
+                                <option selected="@(PostPutWorkItemDTO?.Priority == null)" hidden>@localizer["Choose Priority"]</option>
+                                @foreach (var priority in SpecicalPropsInfo!.Priorities)
+                                {
+                                    <option value=@priority.Id>
+                                        @localizer[priority.Id.ToString()]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <ValidationMessage For="()=>PostPutWorkItemDTO.Priority" />
+                    </div>
+                    <div class="col">
+                        <div class="input-wrap">
+                            <label>@localizer["Category"]</label>
+                            <select class="form-select" @bind="PostPutWorkItemDTO!.Type">
+                                <option selected="@(PostPutWorkItemDTO?.Type == null)" hidden>@localizer["Choose Category"]</option>
+                                @foreach (var category in SpecicalPropsInfo!.Categories)
+                                {
+                                    <option value=@category.Id>
+                                        @localizer[category.Id.ToString()]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <ValidationMessage For="()=>PostPutWorkItemDTO.Type"/>
+                    </div>
+                    @if (PostPutWorkItemDTO!.Id != Guid.Empty)
+                    {
+                        <div class="col">
+                            <div class="input-wrap">
+                                <label>@localizer["Status"]</label>
+                                <select class="form-select" @bind="PostPutWorkItemDTO!.Status">
+                                    <option selected="@(PostPutWorkItemDTO?.Status == null)" hidden>@localizer["Choose Status"]</option>
+                                    @foreach (var status in SpecicalPropsInfo!.Statuses)
+                                    {
+                                        <option value=@status.Id>
+                                            @localizer[status.Id.ToString()]
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                            <ValidationMessage For="()=>PostPutWorkItemDTO.Status" />
+                        </div>
+                    }
+                    <div class="col">
+                        <div class="input-wrap">
+                            <label>@localizer["Assignee"]</label>
+                            <AutoComplete @bind-Value="PostPutWorkItemDTO!.AssigneeName"
+                                          TItem="UserDTO"
+                                          DataProvider="UsersDataProvider"
+                                          PropertyName="@nameof(UserDTO.Email)"
+                                          Placeholder="@localizer["Assignee"]"
+                                          OnChanged="(UserDTO SelectedUser) => OnAssigneeChanged(SelectedUser)" />
+                        </div>
+                        <ValidationMessage For="()=>PostPutWorkItemDTO.AssigneeName" />
+                    </div>
+
+                </div>
+            </div>
+            <div class="form-group mb-3">
+                <div class="input-wrap">
+                    <label>@localizer["Description"]</label>
+                    <div id="toolbar">
+                        <span class="ql-formats">
+                            <select class="ql-font">
+                                <option selected=""></option>
+                                <option value="serif"></option>
+                                <option value="monospace"></option>
+                            </select>
+                            <select class="ql-size">
+                                <option value="small"></option>
+                                <option selected=""></option>
+                                <option value="large"></option>
+                                <option value="huge"></option>
+                            </select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-bold"></button>
+                            <button class="ql-italic"></button>
+                            <button class="ql-underline"></button>
+                            <button class="ql-strike"></button>
+                        </span>
+                        <span class="ql-formats">
+                            <select class="ql-color"></select>
+                            <select class="ql-background"></select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-list" value="ordered"></button>
+                            <button class="ql-list" value="bullet"></button>
+                            <button class="ql-indent" value="-1"></button>
+                            <button class="ql-indent" value="+1"></button>
+                            <select class="ql-align">
+                                <option selected=""></option>
+                                <option value="center"></option>
+                                <option value="right"></option>
+                                <option value="justify"></option>
+                            </select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-link"></button>
+                        </span>
+                    </div>
+                    <div @ref="@RickEditorElement" />
+                </div>
+            </div>
+
+            <div class="form-group mb-3">
+                <Button @ref="SaveBtn" Class="btn btn-outline-success float-end"
+                        Type="ButtonType.Submit">
+                    <Icon Name="IconName.ListCheck" /> @localizer["Save"]
+                </Button>
+            </div>
+        </EditForm>
+    </BodyTemplate>
+</Modal>
+
+<div class="row">
+    <div class="col-md-4">
+    </div>
+    <div class="col-md-8">
+        <div class="d-flex justify-content-end">
+            <p class="mb-1 d-inline-block">
+                <Button Type="ButtonType.Button" Color="ButtonColor.Danger" Outline="true" @onclick="()=>ShowModal(ComfirmDeleteModal)">
+                    <Icon Name="IconName.Trash" /> @localizer["Delete"]</Button>
+                <Button Type="ButtonType.Button" Color="ButtonColor.Success" Outline="true" @onclick="()=>ShowModal(UpdateWorkItemModal)">
+                    <Icon Name="IconName.PencilFill" /> @localizer["Edit"]</Button>
+                @* @if (Assignee is not null && WorkItem is not null && Assignee!.ExternalAccountConnected == true && AuthService.User.Id == WorkItem.AssigneeId && !WorkItem.IsSyncToCalendar)
+                {
+                    <Button @ref="SyncCalendarBtn" Type="ButtonType.Button" Color="ButtonColor.Primary" Outline="true" @onclick="SyncToCalendar">
+                        <Icon Name="IconName.Calendar" /> @localizer["Sync Task To Calendar"]
+                    </Button>
+                } *@
+            </p>
+        </div>
+    </div>
+</div>
+<Callout style="background-color: #FAEFEF" @ref="Callout">
+    <div class="row">
+       <div class="mb-3">
+            <p>
+                @localizer["Added by"] 
+                <Tooltip Title="@CreatorTooltipTitle"
+                    IsHtml="true"
+                    Placement="TooltipPlacement.Top">
+                        <a class="pe-auto" href="/account?id=@(WorkItem!.CreatorId)">
+                            @WorkItem.CreatorName
+                        </a>
+                </Tooltip> 
+                @localizer["at"] <b>[@WorkItem!.CreatedDate]</b>
+                . @localizer["Last updated at"] <b>[@WorkItem.LastUpdatedDate]</b> @localizer["by"] 
+                <Tooltip Title="@LastUpdaterTooltipTitle"
+                    IsHtml="true"
+                    Placement="TooltipPlacement.Top">
+                        <a class="pe-auto" href="/account?id=@(WorkItem.LastUpdaterId)">
+                            @WorkItem.LastUpdaterName
+                        </a>
+                </Tooltip>.
+            </p>
+        </div>
+        <div class="col-md-2">
+            <strong>@localizer["Status"]:</strong>
+        </div>
+        <div class="col-md-4">
+            @if (WorkItem.Status == WorkItemStatus.Done)
+            {
+                <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">
+                    @localizer[WorkItem.Status.ToString()]
+                </Badge>
+            }
+            else if (WorkItem.Status == WorkItemStatus.Todo)
+            {
+                <Badge Color="BadgeColor.Secondary" IndicatorType="BadgeIndicatorType.RoundedPill">
+                    @localizer[WorkItem.Status.ToString()]
+                </Badge>
+            }
+            else
+            {
+                <Badge Color="BadgeColor.Warning" IndicatorType="BadgeIndicatorType.RoundedPill">
+                    @localizer[WorkItem.Status.ToString()]
+                </Badge>
+            }
+        </div>
+        <div class="col-md-2">
+            <strong>@localizer["Start Date"]:</strong>
+        </div>
+        <div class="col-md-4">
+            @(WorkItem.StartDate is not null ? WorkItem.StartDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "?")
+        </div>
+        <div class="col-md-2">
+            <strong>@localizer["Priority"]:</strong>
+        </div>
+        <div class="col-md-4">
+            @if (WorkItem.Priority == WorkItemPriority.DoItNow)
+            {
+                <Badge Color="BadgeColor.Danger" IndicatorType="BadgeIndicatorType.RoundedPill">
+                    @localizer[WorkItem.Priority.ToString()]
+                </Badge>
+            }
+            else if (WorkItem.Priority == WorkItemPriority.Wont)
+            {
+                <Badge Color="BadgeColor.Secondary" IndicatorType="BadgeIndicatorType.RoundedPill">
+                    @localizer[WorkItem.Priority.ToString()]
+                </Badge>
+            }
+            else
+            {
+                <Badge Color="BadgeColor.Warning" IndicatorType="BadgeIndicatorType.RoundedPill">
+                    @localizer[WorkItem.Priority.ToString()]
+                </Badge>
+            }
+        </div>
+        <div class="col-md-2">
+            <strong>@localizer["End Date"]:</strong>
+        </div>
+        <div class="col-md-4">
+            @(WorkItem.EndDate is not null ? WorkItem.EndDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "?")
+        </div>
+        <div class="col-md-2">
+            <strong>@localizer["Assignee"]:</strong>
+        </div>
+        <div class="col-md-4">
+            <Tooltip Title="@AssigneeTooltipTitle"
+                     IsHtml="true">
+                <a class="pe-auto" href="/account?id=@(WorkItem.AssigneeId)">
+                    @WorkItem.AssigneeName
+                </a>
+            </Tooltip>
+        </div>
+        <div class="col-md-2">
+            <strong>@localizer["Duration"]:</strong>
+        </div>
+        <div class="col-md-2">
+            (@localizer["Total"]: @WorkItem.WorkRemain.ToString(CultureInfo.InvariantCulture) @localizer["h"])
+        </div>
+        <div class="col-md-2">
+        </div>
+        <div class="col-md-2">
+            <strong>% @localizer["Done"]:</strong>
+        </div>
+        <div class="col-md-8">
+            <Progress>
+                @if (WorkItem.ProcessPercent == -1)
+                {
+                    <ProgressBar Color="ProgressColor.Danger" Width="100"
+                                 Type="ProgressType.StripedAndAnimated" />
+                }
+                else
+                {
+                    <ProgressBar Width="WorkItem.ProcessPercent*100"
+                                 Label="@String.Format("{0:0.00}%", WorkItem.ProcessPercent*100)"
+                                 Type="ProgressType.StripedAndAnimated" />
+                }
+            </Progress>
+        </div>
+    </div>
+    @* <hr /> *@
+    <div class="row">
+        <div class="row d-flex flex-grow-1 justify-content-center align-items-center">
+            <div class="col"><label class="fw-bold">@localizer["Sub work items"]</label></div>
+            <div class="col d-flex justify-content-end">
+                <Button Color="ButtonColor.Success" Size="Size.ExtraSmall"
+                Outline="true" @onclick="()=>NavToUpsertPage(Guid.Empty, WorkItem.Code)">
+                    <Icon Name="IconName.JournalPlus" /> @localizer["Add Subtask"]
+                </Button>
+            </div>
+        </div>
+        <hr />
+        @foreach (var sub in WorkItem.SubWorkItems)
+        {
+            <div class="col-md-5">
+                <p class="pe-auto" @onclick="()=>NavToDetailPage(sub.Id)">
+                    <u style="color:mediumblue; cursor:pointer">#@sub.Code: @sub.Title</u>
+                </p>
+            </div>
+            <div class="col-md-3">
+                @if (sub.Status == WorkItemStatus.Done)
+                {
+                    <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[sub.Status.ToString()]
+                    </Badge>
+                }
+                else if (sub.Status == WorkItemStatus.Todo)
+                {
+                    <Badge Color="BadgeColor.Secondary" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[sub.Status.ToString()]
+                    </Badge>
+                }
+                else
+                {
+                    <Badge Color="BadgeColor.Warning" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[sub.Status.ToString()]
+                    </Badge>
+                }
+            </div>
+            <div class="col-md-1">
+                <a class="pe-auto" href="/account?id=@(sub.AssigneeId)">
+                    @sub.AssigneeName
+                </a>
+            </div>
+            <div class="col-md-3">
+                @(sub.StartDate is not null ? sub.StartDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "?") -
+                @(sub.EndDate is not null ? sub.EndDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "?")
+            </div>
+            <hr />
+        }
+    </div>
+</Callout>
+<Card Style="margin: 0px;">
+    <CardBody>
+        <Tabs EnableFadeEffect="true">
+            <Tab Title="@localizer["Description"]">
+                <Content>
+                    <Card>
+                        <CardBody>
+                            <div style="pointer-events: none; border:1px">
+                                <div id="toolbar" style="display:none">
+                                    <span class="ql-formats">
+                                        <select class="ql-font">
+                                            <option selected=""></option>
+                                            <option value="serif"></option>
+                                            <option value="monospace"></option>
+                                        </select>
+                                        <select class="ql-size">
+                                            <option value="small"></option>
+                                            <option selected=""></option>
+                                            <option value="large"></option>
+                                            <option value="huge"></option>
+                                        </select>
+                                    </span>
+                                    <span class="ql-formats">
+                                        <button class="ql-bold"></button>
+                                        <button class="ql-italic"></button>
+                                        <button class="ql-underline"></button>
+                                        <button class="ql-strike"></button>
+                                    </span>
+                                    <span class="ql-formats">
+                                        <select class="ql-color"></select>
+                                        <select class="ql-background"></select>
+                                    </span>
+                                    <span class="ql-formats">
+                                        <button class="ql-list" value="ordered"></button>
+                                        <button class="ql-list" value="bullet"></button>
+                                        <button class="ql-indent" value="-1"></button>
+                                        <button class="ql-indent" value="+1"></button>
+                                        <select class="ql-align">
+                                            <option selected=""></option>
+                                            <option value="center"></option>
+                                            <option value="right"></option>
+                                            <option value="justify"></option>
+                                        </select>
+                                    </span>
+                                    <span class="ql-formats">
+                                        <button class="ql-link"></button>
+                                    </span>
+                                </div>
+
+                                <div style="border:none" @ref="@RickTextElement" />
+                            </div>
+                        </CardBody>
+                    </Card>
+                </Content>
+            </Tab>
+            <Tab Title="@localizer["Comments"]">
+                <Content>
+                    <div class="mt-3">
+                        <Alert Color="AlertColor.Primary">
+                            <div class="mb-1">
+                                <div class="mb-0"><p><b>Dang Khoa</b></p></div>
+                                <div class="mb-0"><p>[07/01/2024 11:55 AM]This is the placeholder content for the Profile tab.</p></div>
+                                <div class="mb-0"><p>like · <Icon Name="IconName.HandThumbsUpFill" /> 3</p></div>
+                            </div>
+                        </Alert>
+                        <Alert Color="AlertColor.Primary">
+                            <div class="mb-1">
+                                <div class="mb-0"><p><b>Dang Khoa</b></p></div>
+                                <div class="mb-0"><p>[07/01/2024 11:55 AM]This is the placeholder content for the Profile tab.</p></div>
+                                <div class="mb-0"><p>like · <Icon Name="IconName.HandThumbsUpFill" /> 3</p></div>
+                            </div>
+                        </Alert>
+                        <Alert Color="AlertColor.Secondary">
+                            <div class="row">
+                                <div class="col-md-10">
+                                    <InputText class="form-control" Placeholder="" @bind-Value="CommentContent" />
+                                </div>
+                                <div class="col-md-2">
+                                    <Button Type="ButtonType.Button" Color="ButtonColor.Primary" Outline="false"><Icon Name="IconName.Send" /> Post</Button>
+                                </div>
+                            </div>
+                        </Alert>
+                    </div>
+                </Content>
+            </Tab>
+        </Tabs>
+    </CardBody>
+</Card>
+<Modal @ref="ComfirmDeleteModal" UseStaticBackdrop="true" CloseOnEscape="false">
+    <HeaderTemplate>⚠ @localizer["Confirm delete"]</HeaderTemplate>
+    <BodyTemplate>
+        @localizer["Do you really want to remove this task."]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Danger" @onclick="HandleDelete">🗑 @localizer["Delete it"]</Button>
+        <Button Color="ButtonColor.Success" @onclick="()=>HideModal(ComfirmDeleteModal)">✖ @localizer["Cancel"]</Button>
+    </FooterTemplate>
+</Modal>
+<Modal @ref="ResponseModal" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer[ResponseMessage]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="()=>HideModal(ResponseModal)">✖ @localizer["Close"]</Button>
+    </FooterTemplate>
+</Modal>
+
+@code {
+        /// <summary>
+        /// PreloadService
+        /// </summary>
+        [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    #pragma warning disable BL0005
+        /// <summary>
+        /// Id
+        /// </summary>
+        [Parameter] public Guid Id { get; set; }
+
+    /// <summary>
+    /// WorkItemResponse
+    /// </summary>
+    private GetWorkItemResponse WorkItemResponse = default!;
+
+    /// <summary>
+    /// WorkItem
+    /// </summary>
+    private WorkItemDTO WorkItem = default!;
+
+    /// <summary>
+    /// Creator
+    /// </summary>
+    private UserDTO? Creator;
+
+    /// <summary>
+    /// LastUpdater
+    /// </summary>
+    private UserDTO? LastUpdater;
+
+    /// <summary>
+    /// Assignee
+    /// </summary>
+    private UserDTO? Assignee;
+
+    /// <summary>
+    /// Callout
+    /// </summary>
+    private Callout? Callout;
+
+    /// <summary>
+    /// CreatorTooltipTitle
+    /// </summary>
+    private string CreatorTooltipTitle = string.Empty;
+
+    /// <summary>
+    /// LastUpdaterTooltipTitle
+    /// </summary>
+    private string LastUpdaterTooltipTitle = string.Empty;
+
+    /// <summary>
+    /// AssigneeTooltipTitle
+    /// </summary>
+    private string AssigneeTooltipTitle = string.Empty;
+
+    /// <summary>
+    /// ComfirmDeleteModal
+    /// </summary>
+    private Modal ComfirmDeleteModal = default!;
+
+    /// <summary>
+    /// UpdateWorkItemModal
+    /// </summary>
+    private Modal UpdateWorkItemModal = default!;
+
+    /// <summary>
+    /// ResponseModal
+    /// </summary>
+    private Modal ResponseModal = default!;
+
+    /// <summary>
+    /// SaveBtn
+    /// </summary>
+    private Button SaveBtn = default!;
+
+    /// <summary>
+    /// SyncCalendarBtn
+    /// </summary>
+    private Button SyncCalendarBtn = default!;
+
+    /// <summary>
+    /// EditMode
+    /// </summary>
+    public bool EditMode;
+
+    /// <summary>
+    /// ResponseMessage
+    /// </summary>
+    private string ResponseMessage = string.Empty;
+
+    /// <summary>
+    /// PostPutWorkItemDTO
+    /// </summary>
+    private PostPutWorkItemDTO PostPutWorkItemDTO = new();
+
+    /// <summary>
+    /// WorkItemDTO
+    /// </summary>
+    private WorkItemDTO WorkItemDTO = new();
+
+    /// <summary>
+    /// SpecicalPropsInfo
+    /// </summary>
+    private GetPropertiesInfoResponse? SpecicalPropsInfo = new();
+
+    /// <summary>
+    /// Response
+    /// </summary>
+    private PostWorkItemResponse Response = new(false);
+
+    #region
+    /// <summary>
+    /// DivEditorElement
+    /// </summary>
+    private ElementReference RickEditorElement;
+
+    /// <summary>
+    /// RickTextElement
+    /// </summary>
+    private ElementReference RickTextElement;
+
+    /// <summary>
+    /// OnAfterRenderAsync
+    /// </summary>
+    /// <param name="firstRender"></param>
+    /// <returns></returns>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Task.Delay(500);
+            await LoadEditorAsync(RickTextElement);
+            if (WorkItem is not null && !string.IsNullOrEmpty(WorkItem.Description))
+            {
+                await LoadEditorContent(RickTextElement, WorkItem.Description);
+            }
+        }
+        if (EditMode)
+        {
+            EditMode = false;
+            await ShowModal(UpdateWorkItemModal);
+        }
+    }
+
+    /// <summary>
+    /// ParentCodeDisplayString
+    /// </summary>
+    private string ParentCodeDisplayString = string.Empty;
+
+    /// <summary>
+    /// LoadEditorAsync
+    /// </summary>
+    /// <param name="element"></param>
+    /// <returns></returns>
+    async Task LoadEditorAsync(ElementReference element)
+    {
+        await js.InvokeAsync<string>(
+            "QuillFunctions.createQuill", element);
+    }
+
+    /// <summary>
+    /// GetEditorContent
+    /// </summary>
+    /// <param name="element"></param>
+    /// <returns></returns>
+    async Task<string> GetEditorContent(ElementReference element)
+    {
+        return await js.InvokeAsync<string>(
+            "QuillFunctions.getQuillContent", element);
+    }
+
+    /// <summary>
+    /// LoadEditorContent
+    /// </summary>
+    /// <param name="element"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    async Task LoadEditorContent(ElementReference element, string value)
+    {
+        var QuillDelta = await js.InvokeAsync<object>(
+            "QuillFunctions.loadQuillContent", element, value);
+    }
+    #endregion
+
+    /// <summary>
+    /// ShowModal
+    /// </summary>
+    /// <returns></returns>
+    private async Task ShowModal(Modal modal)
+    {
+        await Task.Delay(500);
+
+        await modal.ShowAsync();
+
+        switch (modal)
+        {
+            case var value when value == UpdateWorkItemModal:
+                {
+                    await LoadEditorAsync(RickEditorElement);
+                    await LoadEditorContent(RickEditorElement, PostPutWorkItemDTO.Description);
+                    break;
+                }
+        }
+    }
+
+    /// <summary>
+    /// OnShowModal
+    /// </summary>
+    private void OnShowingModal(Modal modal)
+    {
+        switch (modal)
+        {
+            case var value when value == UpdateWorkItemModal:
+                {
+                    PostPutWorkItemDTO = new()
+                        {
+                            Id = WorkItem!.Id,
+                            Code = WorkItem!.Code,
+                            Title = WorkItem!.Title,
+                            Description = WorkItem!.Description,
+                            Type = WorkItem!.Type,
+                            LastUpdaterId = WorkItem!.LastUpdaterId,
+                            CreatorId = WorkItem!.CreatorId,
+                            Status = WorkItem!.Status,
+                            AssigneeId = WorkItem!.AssigneeId,
+                            AssigneeName = WorkItem!.AssigneeName,
+                            BoardId = WorkItem!.BoardId,
+                            Priority = WorkItem!.Priority,
+                            ParentWorkItemId = WorkItem!.ParentWorkItemId,
+                            ParentWorkItemCode = WorkItem!.ParentWorkItemCode,
+                            StartDate = WorkItem!.StartDate!.Value.ToDateTimeOffset(TimeZoneInfo.Utc),
+                            EndDate = WorkItem!.EndDate!.Value.ToDateTimeOffset(TimeZoneInfo.Utc),
+                            WorkRemain = WorkItem!.WorkRemain.ToString(CultureInfo.InvariantCulture)
+                        };
+                    ParentCodeDisplayString = WorkItem.ParentWorkItemCode is not null ? WorkItem.ParentWorkItemCode!.ToString()! : string.Empty;
+                    break;
+                }
+        }
+    }
+
+    /// <summary>
+    /// HideModal
+    /// </summary>
+    /// <returns></returns>
+    private async Task HideModal(Modal modal)
+    {
+        await modal.HideAsync();
+    }
+
+    /// <summary>
+    /// CommentContent
+    /// </summary>
+    private string? CommentContent;
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+        ShowSpinner();
+        GetQueryString();
+        await GetWorkItem();
+        await SetupTooltip();
+        Callout!.Heading = $"#{WorkItem.Code}: {WorkItem.Title} [{(WorkItem.Status != WorkItemStatus.Done ? localizer["OPEN"] : localizer["CLOSED"])}]";
+        await LoadEditorContent(RickTextElement, WorkItem.Description);
+        SpecicalPropsInfo = WorkItemService.GetSpecicalPropertiesInfo();
+        HideSpinner();
+    }
+
+    /// <summary>
+    /// GetWorkItem
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetWorkItem()
+    {
+        WorkItemResponse = await WorkItemService.GetByIdAsync(Id);
+        if (WorkItemResponse is null || !WorkItemResponse.Flag)
+        {
+            HideSpinner();
+            NavManager.NavigateTo("/not-found");
+            return;
+        }
+        WorkItem = WorkItemResponse!.WorkItem!;
+    }
+
+    /// <summary>
+    /// GetQueryString
+    /// </summary>
+    private void GetQueryString()
+    {
+        NavManager.TryGetQueryString<bool>(nameof(EditMode), out EditMode);
+    }
+
+    /// <summary>
+    /// UsersDataProvider
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<AutoCompleteDataProviderResult<UserDTO>> UsersDataProvider(AutoCompleteDataProviderRequest<UserDTO> request)
+    {
+        var response = await UserService.GetListAsync(new UsersDTO()
+            {
+                SearchInput = request.Filter.Value,
+                BoardId = WorkItem.BoardId,
+                Paging = new PagingDTO()
+                {
+                    Skip = 0,
+                    Take = 1000
+                }
+            });
+        return await Task.FromResult(new AutoCompleteDataProviderResult<UserDTO>
+            {
+                Data = response.Users,
+                TotalCount = response.Total
+            });
+    }
+
+    /// <summary>
+    /// UsersDataProvider
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<AutoCompleteDataProviderResult<WorkItemDTO>> WorkItemDataProvider(AutoCompleteDataProviderRequest<WorkItemDTO> request)
+    {
+        var response = await WorkItemService.GetListAsync(new WorkItemFilterDTO()
+            {
+                Code = int.Parse(request.Filter.Value),
+                Paging = new PagingDTO()
+                {
+                    Skip = 0,
+                    Take = 1000
+                }
+            });
+        return await Task.FromResult(new AutoCompleteDataProviderResult<WorkItemDTO>
+            {
+                Data = response.WorkItems.Where(_ => _.Code != PostPutWorkItemDTO.Code),
+                TotalCount = response.Total
+            });
+    }
+
+    /// <summary>
+    /// OnAssigneeChanged
+    /// </summary>
+    /// <param name="userDTO"></param>
+    private void OnAssigneeChanged(UserDTO userDTO)
+    {
+        if (userDTO is not null)
+        {
+            PostPutWorkItemDTO.AssigneeId = userDTO.Id;
+            PostPutWorkItemDTO.AssigneeName = userDTO.UserName;
+        }
+    }
+
+    /// <summary>
+    /// OnParentChanged
+    /// </summary>
+    /// <param name="workItemDTO"></param>
+    private void OnParentChanged(WorkItemDTO workItemDTO)
+    {
+        if (workItemDTO is not null)
+        {
+            ParentCodeDisplayString = workItemDTO.Code.ToString()!;
+            PostPutWorkItemDTO.ParentWorkItemId = workItemDTO.Id;
+            PostPutWorkItemDTO.ParentWorkItemCode = workItemDTO.Code;
+        }
+    }
+
+    /// <summary>
+    /// HandleSaveChangeAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task HandleSaveChangeAsync()
+    {
+        SaveBtn.ShowLoading(localizer["Loading..."]);
+        PostPutWorkItemDTO.Description = await GetEditorContent(RickEditorElement);
+        Response = await WorkItemService.UpdateAsync(PostPutWorkItemDTO);
+        ResponseMessage = Response!.Message!;
+        if (Response is not null && Response.Flag)
+        {
+            await GetWorkItem();
+        }
+        SaveBtn.HideLoading();
+        await HideModal(UpdateWorkItemModal);
+        await ShowModal(ResponseModal);
+    }
+
+    /// <summary>
+    /// SyncToCalendar
+    /// </summary>
+    /// <returns></returns>
+    private async Task SyncToCalendar()
+    {
+        bool isGraphTokenAlive = await microsoftCalendarService.CheckExternalAuthState();
+        if (!isGraphTokenAlive)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+
+        SyncCalendarBtn.ShowLoading(localizer["Loading..."]);
+        await microsoftCalendarService.AddEventAsync(new Application.DTOs.CalendarEventDTO
+        {
+                Title = $"#{WorkItem.Code}-{WorkItem.Title}",
+                Start = WorkItem.StartDate!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)!,
+                End = WorkItem.EndDate!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)!
+        }).ConfigureAwait(false);
+
+        await WorkItemService.MarkAsSyncToCalendar(new MarkAsSyncToCalendarDTO()
+            {
+                Ids = new List<Guid>() { WorkItem.Id },
+            }).ConfigureAwait(false);
+        WorkItem.IsSyncToCalendar = true;
+        ResponseMessage = $"{localizer["Successfully sync this task to Calendar"]}.";
+        SyncCalendarBtn.HideLoading();
+        await ShowModal(ResponseModal);
+    }
+
+    /// <summary>
+    /// SetupTooltip
+    /// </summary>
+    /// <returns></returns>
+    private async Task SetupTooltip()
+    {
+        await SetUsersProfilesAsync(new List<string>
+            { WorkItem.CreatorId, WorkItem.LastUpdaterId!, WorkItem.AssigneeId! });
+        CreatorTooltipTitle = Helper.FormatProfileHtml(Creator);
+        LastUpdaterTooltipTitle = Helper.FormatProfileHtml(LastUpdater);
+        AssigneeTooltipTitle = Helper.FormatProfileHtml(Assignee);
+    }
+
+    /// <summary>
+    /// NavToUpsertPage
+    /// </summary>
+    /// <param name="id"></param>
+    /// <param name="parentCode"></param>
+    private void NavToUpsertPage(Guid id, int? parentCode = null)
+    {
+        string url = $"/create-task?projectid={WorkItem.BoardId}";
+        if (id != Guid.Empty)
+        {
+            url += $"&id={id}";
+        }
+        if (parentCode is not null)
+            url += $"&parentcode={parentCode}";
+        NavManager.NavigateTo(url);
+    }
+
+    /// <summary>
+    /// NavToUpsertPage
+    /// </summary>
+    /// <param name="id"></param>
+    private void NavToDetailPage(Guid id)
+    {
+        string url = $"/task/{id}";
+        NavManager.NavigateTo(url, forceLoad: true);
+    }
+
+    /// <summary>
+    /// GetUsersProfiles
+    /// </summary>
+    /// <param name="ids"></param>
+    private async Task SetUsersProfilesAsync(List<string> ids)
+    {
+        List<UserDTO> users = new List<UserDTO>();
+        foreach (var id in ids)
+        {
+            var (flat, message, user) = await UserService.GetByIdAsync(id);
+            if (flat)
+            {
+                users.Add(user!);
+            }
+        }
+        Creator = users.FirstOrDefault(_ => _.Id == WorkItem.CreatorId);
+        Creator!.Role.DisplayName = localizer[Creator.Role.DisplayName];
+        LastUpdater = users.FirstOrDefault(_ => _.Id == WorkItem.LastUpdaterId);
+        LastUpdater!.Role.DisplayName = localizer[LastUpdater.Role.DisplayName];
+        Assignee = users.FirstOrDefault(_ => _.Id == WorkItem.AssigneeId);
+        Assignee!.Role.DisplayName = localizer[Assignee.Role.DisplayName];
+    }
+
+    /// <summary>
+    /// HandleDelete
+    /// </summary>
+    private async Task HandleDelete()
+    {
+        await WorkItemService.DeleteAsync(WorkItem.Id, string.Empty);
+        NavManager.NavigateTo("/tasks");
+    }
+
+    /// <summary>
+    /// ShowSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void ShowSpinner()
+    {
+        PreloadService.Show(SpinnerColor.Light);
+    }
+
+    /// <summary>
+    /// HideSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void HideSpinner()
+    {
+        PreloadService.Hide();
+    }
+}

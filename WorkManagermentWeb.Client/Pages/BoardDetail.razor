@@ -1,0 +1,987 @@
+﻿@page "/project/"
+@inject NavigationManager NavManager
+@inject IBoard BoardService
+@inject IAuthService AuthService
+@inject IUser UserService
+@inject IStringLocalizer<Resource> localizer
+@inject IJSRuntime js
+
+
+<Modal @ref="UpdateBoardModal" Size="ModalSize.ExtraLarge"
+       OnShowing="()=>OnShowingModal(UpdateBoardModal)" IsVerticallyCentered="true">
+    <HeaderTemplate>🖌 @localizer["Update Project"]</HeaderTemplate>
+    <BodyTemplate>
+        <EditForm Model="UpdateBoardDTO" OnValidSubmit="UpdateBoardAsync" Enhance>
+            <DataAnnotationsValidator />
+            <div class="row">
+                <div class="col">
+                    <div class="form-group mb-3">
+                        <FloatingText @bind-Value="UpdateBoardDTO.Title"
+                                      class="form-control"
+                                      Type="text"
+                                      Placeholder="@localizer["Title"]"
+                                      Label="@localizer["Title"]" />
+                        <ValidationMessage For="()=>UpdateBoardDTO.Title" />
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="mb-3">
+                        <div class="input-wrap">
+                            <label>@localizer["Status"]</label>
+                            <select style="width: 100%;" @bind="UpdateBoardDTO.Status">
+                                <option value="" hidden>@localizer["Choose Status"]</option>
+                                @foreach (var status in Props!.BoardStatus)
+                                {
+                                    <option value=@status.Id>
+                                        @localizer[status.Id.ToString()]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <ValidationMessage For="()=>UpdateBoardDTO.Status" />
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <div class="mb-3">
+                        <div class="input-wrap">
+                            <label>@localizer["Start Date - End Date"]</label>
+                            <div class="daterange">
+                                <DateRangePicker @bind-StartDate="UpdateBoardDTO.StartDate" @bind-EndDate="UpdateBoardDTO.EndDate" DateFormat="dd/MM/yyyy" />
+                            </div>
+                        </div>
+                        <ValidationMessage For="()=>UpdateBoardDTO.StartDate" />
+                        <ValidationMessage For="()=>UpdateBoardDTO.EndDate" />
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="mb-3">
+                        <div class="input-wrap">
+                            <label>@localizer["Assignee"]</label>
+                            <AutoComplete @bind-Value="UpdateBoardDTO!.AssigneeName"
+                                TItem="UserDTO"
+                                DataProvider="AssineesDataProvider"
+                                PropertyName="@nameof(UserDTO.Email)"
+                                Placeholder="@localizer["Assignee"]"
+                                OnChanged="(UserDTO SelectedUser) => OnAssigneeChanged(SelectedUser)" />
+                        </div>
+                        <ValidationMessage For="()=>UpdateBoardDTO.AssigneeName" />
+                    </div>
+                </div>
+            </div>
+            <div class="form-group mb-3">
+                <div class="input-wrap">
+                    <label>@localizer["Description"]</label>
+                    <div id="toolbar">
+                        <span class="ql-formats">
+                            <select class="ql-font">
+                                <option selected=""></option>
+                                <option value="serif"></option>
+                                <option value="monospace"></option>
+                            </select>
+                            <select class="ql-size">
+                                <option value="small"></option>
+                                <option selected=""></option>
+                                <option value="large"></option>
+                                <option value="huge"></option>
+                            </select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-bold"></button>
+                            <button class="ql-italic"></button>
+                            <button class="ql-underline"></button>
+                            <button class="ql-strike"></button>
+                        </span>
+                        <span class="ql-formats">
+                            <select class="ql-color"></select>
+                            <select class="ql-background"></select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-list" value="ordered"></button>
+                            <button class="ql-list" value="bullet"></button>
+                            <button class="ql-indent" value="-1"></button>
+                            <button class="ql-indent" value="+1"></button>
+                            <select class="ql-align">
+                                <option selected=""></option>
+                                <option value="center"></option>
+                                <option value="right"></option>
+                                <option value="justify"></option>
+                            </select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-link"></button>
+                        </span>
+                    </div>
+                    <div @ref="@RickEditorElement" />
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="d-grid gap-2 mb-3">
+                    <Button @ref="UpdateBoardBtn" Class="btn btn-success float-end" Type="ButtonType.Submit">
+                        <Icon Name="IconName.BagCheck" /> @localizer["Save Changes"]
+                    </Button>
+                </div>
+            </div>
+        </EditForm>
+    </BodyTemplate>
+</Modal>
+<Modal @ref="AddMemberModal" OnShowing="()=>OnShowingModal(AddMemberModal)">
+    <HeaderTemplate>🖌 @localizer["Add Member"]</HeaderTemplate>
+    <BodyTemplate>
+        <div class="mb-3">
+            <div class="input-wrap">
+                <label>@localizer["Choose a new member"]</label>
+                <AutoComplete TItem="UserDTO" @bind-Value="ChoosenMember.UserName"
+                    DataProvider="UsersDataProvider"
+                    PropertyName="@nameof(UserDTO.Email)"
+                    Placeholder="@localizer["Member"]"
+                    OnChanged="(UserDTO SelectedUser) => OnMemberChanged(SelectedUser)" />
+            </div>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Success" @onclick="AddMember" Disabled="@IsDisableedAddMemberBtn"><Icon Name="IconName.PersonAdd"/> @localizer["Add"]</Button>
+    </FooterTemplate>
+</Modal>
+<Modal @ref="ResponseModal" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer[Response.Message]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="()=>HideModall(ResponseModal)">✖ @localizer["Close"]</Button>
+    </FooterTemplate>
+</Modal>
+<Modal @ref="ConfirmModal" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer["Are you sure with this action?"]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="()=>HideModall(ConfirmModal)">✖ @localizer["No"]</Button>
+        <Button Color="ButtonColor.Primary" @onclick="AcceptAction">✔ @localizer["Yes"]</Button>
+    </FooterTemplate>
+</Modal>
+<body>
+    <div class="container-wrapper">
+        <div class="container-fluid">
+            <div class="heading clearfix">
+                <div class="pull-left">
+                    <h4><i class="fa fa-briefcase"></i> &nbsp; @localizer["Project Details"]</h4>
+                </div>
+                @if (AuthService.User.Role.Value != UserRoleConstants.Member)
+                {
+                    <div class="pull-right">
+                        <span><u style="cursor:pointer" @onclick="()=>ShowModal(UpdateBoardModal)"><i class="fa fa-pencil"></i> @localizer["Edit"]</u></span>
+                    </div>
+                }
+            </div>
+            <div class="row">
+                <div class="col-sm-4 col-md-3">
+                    <div class="left-panel">
+                        <div class="info-panel">
+                            <div class="personal-sec">
+                                <div class="name">
+                                    <h3 class="margin0">@Board.Name</h3>
+                                    <h5 class="margint5">@Board.Owner.FullName</h5>
+                                </div>
+                                <div class="contact-info">
+                                    <div><i class="fa fa-envelope"></i> <span>@Board.Owner.Email</span></div>
+                                    <div><i class="fa fa-certificate"></i> <span>@localizer[Board.Owner.Role.DisplayName]</span></div>
+                                </div>
+                            </div>
+                            <div class="personal-sec sec-footer clearfix">
+                                <ul class="lead-score">
+                                    <li>
+                                        <div class="score">@Board.Members.Count()</div>
+                                        <div class="score-label">@localizer["Members"]</div>
+                                    </li>
+                                    <li>
+                                        <div class="score">
+                                            <a class="pe-auto text-white" href="/tasks?projectid=@(Board.Id)">
+                                                @Board.WorkItems.Count()
+                                            </a>
+                                        </div>
+                                        <div class="score-label">@localizer["Tasks"]</div>
+                                    </li>
+                                    <li>
+                                        <div class="score">
+                                            @localizer[Board.Status.ToString()]
+                                        </div>
+                                        <div class="score-label">@localizer["Status"]</div>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="lead-property margint20 clearfix">
+                            <div class="sec-header">
+                                <span>@localizer["Project Lifetime"]</span>
+                            </div>
+                            <div class="sec-body">
+                                <div class="form-group row">
+                                    <label class="control-label col-md-6 col-xs-6 fw-bold d-flex justify-content-center">@localizer["Start Date"] </label>
+                                    <div class="col-md-6 col-xs-6 d-flex justify-content-center">
+                                        @Board.StartDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)
+                                    </div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="control-label col-md-6 col-xs-6 fw-bold d-flex justify-content-center">@localizer["End Date"] </label>
+                                    <div class="col-md-6 col-xs-6 d-flex justify-content-center">
+                                        @Board.EndDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="menu-panel margint20 marginb15">
+                            <ul class="menu">
+                                <li class="active"><a data-toggle="tab" href="#description">@localizer["Description"]</a></li>
+                                <li><a data-toggle="tab" class="" href="#members">@localizer["Members"]</a></li>
+                                <li><a data-toggle="tab" class="" href="#openningMainWorkItems">@localizer["Openning Issuess"]</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-8 col-md-9">
+                    <div class="right-panel">
+                        <div class="tab-content">
+                            <div id="description" class="tab-pane fade in active">
+                                <div class="form-group row">
+                                    <div style="pointer-events: none;">
+                                        <div id="toolbar" style="display:none">
+                                            <span class="ql-formats">
+                                                <select class="ql-font">
+                                                    <option selected=""></option>
+                                                    <option value="serif"></option>
+                                                    <option value="monospace"></option>
+                                                </select>
+                                                <select class="ql-size">
+                                                    <option value="small"></option>
+                                                    <option selected=""></option>
+                                                    <option value="large"></option>
+                                                    <option value="huge"></option>
+                                                </select>
+                                            </span>
+                                            <span class="ql-formats">
+                                                <button class="ql-bold"></button>
+                                                <button class="ql-italic"></button>
+                                                <button class="ql-underline"></button>
+                                                <button class="ql-strike"></button>
+                                            </span>
+                                            <span class="ql-formats">
+                                                <select class="ql-color"></select>
+                                                <select class="ql-background"></select>
+                                            </span>
+                                            <span class="ql-formats">
+                                                <button class="ql-list" value="ordered"></button>
+                                                <button class="ql-list" value="bullet"></button>
+                                                <button class="ql-indent" value="-1"></button>
+                                                <button class="ql-indent" value="+1"></button>
+                                                <select class="ql-align">
+                                                    <option selected=""></option>
+                                                    <option value="center"></option>
+                                                    <option value="right"></option>
+                                                    <option value="justify"></option>
+                                                </select>
+                                            </span>
+                                            <span class="ql-formats">
+                                                <button class="ql-link"></button>
+                                            </span>
+                                        </div>
+                                        <div style="border:none" @ref="@RickTextElement" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="members" class="tab-pane fade">
+                                <div class="form-group row">
+                                    <div class="container-fluid">
+                                        @if (AuthService.User.Role.Value != UserRoleConstants.Member)
+                                    {
+                                        <div class="heading clearfix">
+                                        <div class="pull-right">
+                                            <span><u style="cursor:pointer" @onclick="()=>ShowModal(AddMemberModal)"><i class="fa fa-pencil"></i> @localizer["Add Member"]</u></span>
+                                        </div>
+                                        </div>
+                                    }
+                                    <div class="row">
+                                        <Grid @ref="Grid" TItem="UserDTO"
+                                        AllowSorting="false"
+                                        Class="table table-hover table-bordered table-striped"
+                                        Data="@Board.Members"
+                                        RowClass="GetRowClass"
+                                        AllowPaging="true"
+                                        PageSize="5"
+                                        PageSizeSelectorVisible="true"
+                                        PageSizeSelectorItems="@(new int[] { 5,10,15 })"
+                                                  PaginationItemsTextFormat="@localizer["PaginationItemsTextFormat"]"
+                                                  ItemsPerPageText="@localizer["ItemsPerPageText"]"
+                                                  Responsive="true">
+                                        <GridColumns>
+                                            <GridColumn TItem="UserDTO" HeaderText="@localizer["FullName"]" SortKeySelector="item => item.FullName">
+                                                <a class="pe-auto" href="/account?id=@(context.Id)">
+                                                    @context.FullName
+                                                </a>
+                                            </GridColumn>
+                                            <GridColumn TItem="UserDTO" HeaderText="@localizer["Username"]" SortKeySelector="item => item.UserName">
+                                                @context.UserName
+                                            </GridColumn>
+                                            <GridColumn TItem="UserDTO" HeaderText="@localizer["AccountType"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+                                                        SortKeySelector="item => item.AccountType">
+                                                <Badge Color="BadgeColor.Primary" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[context.AccountType.ToString()]</Badge>
+                                            </GridColumn>
+                                            <GridColumn TItem="UserDTO" HeaderText="Email" SortKeySelector="item => item.Email">
+                                                @context.Email
+                                            </GridColumn>
+                                                    <GridColumn TItem="UserDTO" HeaderText="@localizer["Phone"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End"
+                                                    SortKeySelector="item => item.Phone">
+                                                @context.Phone
+                                            </GridColumn>
+                                                    <GridColumn TItem="UserDTO" HeaderText="@localizer["Status"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center" SortKeySelector="item => item.ActiveStatus">
+                                                @if (context.ActiveStatus)
+                                                {
+                                                    <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer["Active"]</Badge>
+                                                }
+                                                else
+                                                {
+                                                    <Badge Color="BadgeColor.Danger" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer["Deactive"]</Badge>
+                                                }
+                                            </GridColumn>
+                                                    <GridColumn TItem="UserDTO" HeaderText="@localizer["Role"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+                                                    SortKeySelector="item => item.Role.DisplayName">
+                                                @if (@context.Role.Value.Equals(UserRoleConstants.Member))
+                                                {
+                                                            <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[context.Role.DisplayName]</Badge>
+                                                }
+                                                else if (@context.Role.Value.Equals(UserRoleConstants.CEO))
+                                                {
+                                                            <Badge Color="BadgeColor.Warning" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[context.Role.DisplayName]</Badge>
+                                                }
+                                                else
+                                                {
+                                                            <Badge Color="BadgeColor.Info" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[context.Role.DisplayName]</Badge>
+                                                }
+                                            </GridColumn>
+                                            <GridColumn TItem="UserDTO" HeaderText="@localizer["Action"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+                                                        @if (AuthService.User.Role.Value == UserRoleConstants.CEO ||
+                                                        (AuthService.User.Role.Value == UserRoleConstants.ProjectManager && context.Id != Board.Owner.Id))
+                                                        {
+                                                            <Button Color="ButtonColor.Danger" Outline="true" @onclick="()=>HandleComfirm(context.Id)" Size="Size.ExtraSmall">
+                                                                <Tooltip Title="@localizer["Remove Member"]" role="button">
+                                                                    <Icon Name="IconName.Trash"></Icon>
+                                                                </Tooltip>
+                                                            </Button>
+                                                        }
+                                                        @if (AuthService.User.Role.Value == UserRoleConstants.CEO || context.Id == AuthService.User.Id)
+                                                        {
+                                                <Button Color="ButtonColor.Primary" Outline="true" @onclick="()=>NavToAccount(context.Id, true)" Size="Size.ExtraSmall">
+                                                    <Tooltip Title="@localizer["Change Profile"]" role="button">
+                                                        <Icon Name="IconName.PersonVCard"></Icon>
+                                                    </Tooltip>
+                                                    </Button>
+                                                }
+                                            </GridColumn>
+                                        </GridColumns>
+                                    </Grid> 
+                                    </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="openningMainWorkItems" class="tab-pane fade">
+                                <div class="form-group row">
+                                    <div class="container-fluid">
+                                        <div class="heading clearfix">
+                                            <div class="pull-right">
+                                                <span><u style="cursor:pointer" @onclick="NavToWorkItemManagerment"><i class="fa fa-pencil-square-o"></i> @localizer["New Task"]</u></span>
+                                            </div>
+                                        </div>
+                                    <div class="row">
+                                        <Grid TItem="WorkItemDTO"
+                                        AllowSorting="false"
+                                        Class="table table-hover table-bordered table-striped"
+                                        Data="@Board.WorkItems.Where(_ => _.Status != WorkItemStatus.Done && _.Id == _.ParentWorkItemId)"
+                                        AllowPaging="true"
+                                        PageSize="5"
+                                        PageSizeSelectorVisible="true"
+                                        PageSizeSelectorItems="@(new int[] { 5,10,15 })"
+                                                  PaginationItemsTextFormat="@localizer["PaginationItemsTextFormat"]"
+                                                  ItemsPerPageText="@localizer["ItemsPerPageText"]"
+                                                  Responsive="true"
+                                        RowClass="GetRowClass">
+                                        <GridColumns>
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="Code" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+                                            SortKeySelector="item => item.Code">
+                                                @context.Code
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Title"]" SortKeySelector="item => item.Title">
+                                                    <p><a class="pe-auto" href="/task/@(context.Id)">
+                                                        @context.Title
+                                                    </a></p>
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Type"]" SortKeySelector="item => item.Type">
+                                                        @localizer[context.Type.ToString()]
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Start At"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End"
+                                            SortKeySelector="item => item.StartDate">
+                                                @(context.StartDate is not null ? context.StartDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "")
+                                            </GridColumn>
+
+                                                    <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["End At"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End" SortKeySelector="item => item.EndDate">
+                                                @(context.EndDate is not null ? context.EndDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "")
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Status"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center" SortKeySelector="item => item.Status">
+                                                @if (context.Status == WorkItemStatus.Done)
+                                                {
+                                                    <Badge Color="BadgeColor.Success"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Status.ToString()]
+                                                    </Badge>
+                                                }
+                                                else if (context.Status == WorkItemStatus.Todo)
+                                                {
+                                                    <Badge Color="BadgeColor.Secondary"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Status.ToString()]
+                                                    </Badge>
+                                                }
+                                                else
+                                                {
+                                                    <Badge Color="BadgeColor.Warning"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Status.ToString()]
+                                                    </Badge>
+                                                }
+                                            </GridColumn>
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["SyncCalendar"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+                                                SortKeySelector="item => item.IsSyncToCalendar">
+                                                @if (!context.IsSyncToCalendar)
+                                                {
+                                                    <Badge Color="BadgeColor.Secondary" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                        @localizer["NotSync"]
+                                                    </Badge>
+                                                }
+                                                else
+                                                {
+                                                    <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                        @localizer["Synced"]
+                                                    </Badge>
+                                                }
+                                            </GridColumn>
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Priority"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center" SortKeySelector="item => item.Priority">
+                                                @if (context.Priority == WorkItemPriority.DoItNow)
+                                                {
+                                                    <Badge Color="BadgeColor.Danger" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Priority.ToString()]
+                                                    </Badge>
+                                                }
+                                                else if (context.Priority == WorkItemPriority.Wont)
+                                                {
+                                                    <Badge Color="BadgeColor.Secondary" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Priority.ToString()]
+                                                    </Badge>
+                                                }
+                                                else
+                                                {
+                                                    <Badge Color="BadgeColor.Warning" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Priority.ToString()]
+                                                    </Badge>
+                                                }
+                                            </GridColumn>
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Action"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+                                                <Button Color="ButtonColor.Primary" Outline="true" Size="Size.ExtraSmall" @onclick="()=>NavToUpdateTask(context.Id)">
+                                                    <Tooltip Title="@localizer["Edit Task"]" role="button">
+                                                        <Icon Name="IconName.Pencil"></Icon>
+                                                    </Tooltip>
+                                                </Button>
+                                            </GridColumn>
+                                        </GridColumns>
+                                    </Grid> 
+                                    </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+@code {
+    /// <summary>
+    /// PreloadService
+    /// </summary>
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    /// <summary>
+    /// Grid
+    /// </summary>
+    private Grid<UserDTO> Grid = default!;
+
+    /// <summary>
+    /// Id
+    /// </summary>
+    public Guid Id;
+
+    /// <summary>
+    /// EditMode
+    /// </summary>
+    public bool EditMode;
+
+    /// <summary>
+    /// UpdateBoardBtn
+    /// </summary>
+    private Button UpdateBoardBtn = default!;
+
+    /// <summary>
+    /// Board
+    /// </summary>
+    private BoardDTO Board { get; set; } = new();
+
+    /// <summary>
+    /// UpdateBoardDTO
+    /// </summary>
+    private PostPutBoardDTO UpdateBoardDTO { get; set; } = new();
+
+    /// <summary>
+    /// ChoosenMember
+    /// </summary>
+    private UserDTO ChoosenMember = new();
+
+    /// <summary>
+    /// UpdateBoardModal
+    /// </summary>
+    private Modal UpdateBoardModal = default!;
+
+    /// <summary>
+    /// AddMemberModal
+    /// </summary>
+    private Modal AddMemberModal = default!;
+
+    /// <summary>
+    /// ResponseModal
+    /// </summary>
+    private Modal ResponseModal = default!;
+
+    /// <summary>
+    /// ConfirmModal
+    /// </summary>
+    private Modal ConfirmModal = default!;
+
+    /// <summary>
+    /// Response
+    /// </summary>
+    private PostPutResponse Response = new(false, string.Empty, default!);
+
+    /// <summary>
+    /// Props
+    /// </summary>
+    private GetPropertiesInfoResponse Props = new();
+
+    /// <summary>
+    /// IsDisableedAddMemberBtn
+    /// </summary>
+    private bool IsDisableedAddMemberBtn;
+
+    /// <summary>
+    /// SelectedUserId
+    /// </summary>
+    private string SelectedUserId = string.Empty;
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+
+        ShowSpinner();
+        GetQueryString();
+        await GetBoardDetailAsync();
+        HideSpinner();
+    }
+
+    /// <summary>
+    /// GetQueryString
+    /// </summary>
+    private void GetQueryString()
+    {
+        NavManager.TryGetQueryString<Guid>(nameof(Id), out Id);
+        NavManager.TryGetQueryString<bool>(nameof(EditMode), out EditMode);
+    }
+
+    /// <summary>
+    /// OnAfterRenderAsync
+    /// </summary>
+    /// <param name="firstRender"></param>
+    /// <returns></returns>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await Task.Delay(500);
+            await LoadEditorAsync(RickTextElement);
+            await LoadEditorContent(RickTextElement, Board.Description);
+        }
+        if (EditMode)
+        {
+            EditMode = false;
+            await ShowModal(UpdateBoardModal);
+        }
+    }
+
+    /// <summary>
+    /// GetBoardDetailAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetBoardDetailAsync()
+    {
+        GetBoardResponse response = await BoardService.GetByIdAsync(Id);
+        if (response is null || !response.Flag)
+        {
+            NavManager.NavigateTo("/not-found");
+        }
+        else
+        {
+            Board = response.BoardDTO!;
+        }
+    }
+
+    /// <summary>
+    /// UpdateBoardAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task UpdateBoardAsync()
+    {
+        UpdateBoardBtn.ShowLoading(@localizer["Loading..."]);
+        UpdateBoardDTO.Description = await GetEditorContent(RickEditorElement);
+        Response = await BoardService.UpdateAsync(UpdateBoardDTO);
+        if (Response.Flag)
+        {
+            await GetBoardDetailAsync();
+        }
+        UpdateBoardBtn.HideLoading();
+        await HideModall(UpdateBoardModal);
+        await ShowModal(ResponseModal);
+    }
+
+    /// <summary>
+    /// AddMember
+    /// </summary>
+    /// <returns></returns>
+    private async Task AddMember()
+    {
+        await HideModall(AddMemberModal);
+        Response = await BoardService.AddMemberAsync(new BoardMemberDTO
+        {
+            MemberId = ChoosenMember.Id
+        }, Board.Id);
+        if (Response.Flag)
+        {
+            Board.Members.Add(ChoosenMember);
+            await Grid.RefreshDataAsync();
+        }
+        ChoosenMember = new();
+        await ShowModal(ResponseModal);
+    }
+
+    /// <summary>
+    /// HandleComfirm
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <returns></returns>
+    private async Task HandleComfirm(string userId)
+    {
+        SelectedUserId = userId;
+        await ShowModal(ConfirmModal);
+    }
+
+    /// <summary>
+    /// AcceptAction
+    /// </summary>
+    /// <returns></returns>
+    private async Task AcceptAction()
+    {
+        await HideModall(ConfirmModal);
+        await RemoveMember();
+    }
+
+    /// <summary>
+    /// RemoveMember
+    /// </summary>
+    /// <returns></returns>
+    private async Task RemoveMember()
+    {
+        Response = await BoardService.RemoveMemberAsync(new BoardMemberDTO
+        {
+            MemberId = SelectedUserId
+        }, Board.Id);
+        if (Response.Flag)
+        {
+            UserDTO removedMember = Board.Members.FirstOrDefault(_ => _.Id == SelectedUserId)!;
+            Board.Members.Remove(removedMember);
+            await Grid.RefreshDataAsync();
+        }
+        SelectedUserId = string.Empty;
+        await ShowModal(ResponseModal);
+    }
+
+    /// <summary>
+    /// UsersDataProvider
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<AutoCompleteDataProviderResult<UserDTO>> UsersDataProvider(AutoCompleteDataProviderRequest<UserDTO> request)
+    {
+        var response = await UserService.GetListAsync(new UsersDTO()
+        {
+            SearchInput = request.Filter.Value,
+            Paging = new PagingDTO()
+            {
+                Skip = 0,
+                Take = 1000
+            }
+        });
+        return await Task.FromResult(new AutoCompleteDataProviderResult<UserDTO>
+        {
+            Data = response.Users.Where(_ => !Board.Members.Any(b => b.Id == _.Id)),
+            TotalCount = response.Total});
+    }
+
+    /// <summary>
+    /// HideModall
+    /// </summary>
+    /// <returns></returns>
+    private async Task HideModall(Modal modal)
+    {
+        await modal.HideAsync();
+    }
+
+    /// <summary>
+    /// OnShowModal
+    /// </summary>
+    private void OnShowingModal(Modal modal)
+    {
+        switch (modal)
+        {
+            case var value when value == UpdateBoardModal:
+                {
+                    UpdateBoardDTO = new PostPutBoardDTO()
+                        {
+                            Id = Board.Id,
+                            Title = Board.Name,
+                            Description = Board.Description,
+                            Status = Board.Status,
+                            AssigneeId = Board.AssigneeId,
+                            AssigneeName = Board.AssigneeName,
+                            StartDate = Board.StartDate.ToDateTimeOffset(TimeZoneInfo.Utc),
+                            EndDate = Board.EndDate.ToDateTimeOffset(TimeZoneInfo.Utc),
+                            WorkSpaceId = Board.WorkSpaceId
+                        };
+                    break;
+                }
+            case var value when value == AddMemberModal:
+                {
+                    IsDisableedAddMemberBtn = true;
+                    ChoosenMember = new();
+                    break;
+                }
+        }
+    }
+
+    /// <summary>
+    /// ShowModal
+    /// </summary>
+    /// <param name="modal"></param>
+    /// <returns></returns>
+    private async Task ShowModal(Modal modal)
+    {
+        await Task.Delay(500);
+        await modal.ShowAsync();
+        if (modal == UpdateBoardModal)
+        {
+            await LoadEditorAsync(RickEditorElement);
+            await LoadEditorContent(RickEditorElement, UpdateBoardDTO.Description);
+        }
+    }
+
+    /// <summary>
+    /// OnAssigneeChanged
+    /// </summary>
+    /// <param name="userDTO"></param>
+    private void OnMemberChanged(UserDTO userDTO)
+    {
+        if (userDTO is not null)
+        {
+            ChoosenMember = userDTO;
+            IsDisableedAddMemberBtn = false;
+            return;
+        }
+        IsDisableedAddMemberBtn = true;
+    }
+
+    /// <summary>
+    /// AssineesDataProvider
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<AutoCompleteDataProviderResult<UserDTO>> AssineesDataProvider(AutoCompleteDataProviderRequest<UserDTO> request)
+    {
+        var response = await UserService.GetListAsync(new UsersDTO()
+            {
+                SearchInput = request.Filter.Value,
+                Paging = new PagingDTO()
+                {
+                    Skip = 0,
+                    Take = 1000
+                }
+            });
+        return await Task.FromResult(new AutoCompleteDataProviderResult<UserDTO>
+            {
+                Data = response.Users.Where(_ => _.Role.Value.Equals(UserRoleConstants.ProjectManager)),
+                TotalCount = response.Total
+            });
+    }
+
+    /// <summary>
+    /// OnAssigneeChanged
+    /// </summary>
+    /// <param name="userDTO"></param>
+    private void OnAssigneeChanged(UserDTO userDTO)
+    {
+        if (userDTO is not null)
+        {
+            UpdateBoardDTO.AssigneeId = userDTO.Id;
+            UpdateBoardDTO.AssigneeName = userDTO.UserName;
+        }
+    }
+
+    /// <summary>
+    /// NavToWorkItems
+    /// </summary>
+    /// <param name="id"></param>
+    private void NavToWorkItems(Guid id)
+    {
+        NavManager.NavigateTo($"/tasks/{id}");
+    }
+
+    /// <summary>
+    /// NavToWorkItemManagerment
+    /// </summary>
+    private void NavToWorkItemManagerment()
+    {
+        NavManager.NavigateTo($"/create-task?projectid={Board.Id}");
+    }
+
+    /// <summary>
+    /// NavToAccount
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <param name="editMode"></param>
+    /// <returns></returns>
+    private void NavToAccount(string userId, bool editMode)
+    {
+        NavManager.NavigateTo($"/account?id={userId}&editmode={editMode}");
+    }
+
+    /// <summary>
+    /// NavToUpdateTask
+    /// </summary>
+    /// <param name="taskId"></param>
+    private void NavToUpdateTask(Guid taskId)
+    {
+        string url = $"/task/{taskId}?editmode=true";
+        NavManager.NavigateTo(url);
+    }
+
+    /// <summary>
+    ///GetRowClass
+    /// </summary>
+    /// <param name="workItem"></param>
+    /// <returns></returns>
+    private string GetRowClass(WorkItemDTO workItem)
+    {
+        if (workItem.Status != WorkItemStatus.Done && workItem.Priority == WorkItemPriority.DoItNow)
+            return "align-middle table-danger";
+        return "align-middle table-warning";
+    }
+
+    /// <summary>
+    ///GetRowClass
+    /// </summary>
+    /// <param name="userDTO"></param>
+    /// <returns></returns>
+    private string GetRowClass(UserDTO userDTO)
+    {
+        return "align-middle";
+    }
+
+    #region
+    /// <summary>
+    /// DivEditorElement
+    /// </summary>
+    private ElementReference RickEditorElement;
+
+    /// <summary>
+    /// RickTextElement
+    /// </summary>
+    private ElementReference RickTextElement;
+
+    /// <summary>
+    /// LoadEditorAsync
+    /// </summary>
+    /// <param name="element"></param>
+    /// <returns></returns>
+    async Task LoadEditorAsync(ElementReference element)
+    {
+        await js.InvokeAsync<string>(
+            "QuillFunctions.createQuill", element);
+    }
+
+    /// <summary>
+    /// GetEditorContent
+    /// </summary>
+    /// <param name="element"></param>
+    /// <returns></returns>
+    async Task<string> GetEditorContent(ElementReference element)
+    {
+        return await js.InvokeAsync<string>(
+            "QuillFunctions.getQuillContent", element);
+    }
+
+    /// <summary>
+    /// LoadEditorContent
+    /// </summary>
+    /// <param name="element"></param>
+    /// <param name="value"></param>
+    /// <returns></returns>
+    async Task LoadEditorContent(ElementReference element, string value)
+    {
+        var QuillDelta = await js.InvokeAsync<object>(
+            "QuillFunctions.loadQuillContent", element, value);
+    }
+    #endregion
+
+    /// <summary>
+    /// ShowSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void ShowSpinner()
+    {
+        PreloadService.Show(SpinnerColor.Light);
+    }
+
+    /// <summary>
+    /// HideSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void HideSpinner()
+    {
+        PreloadService.Hide();
+    }
+}

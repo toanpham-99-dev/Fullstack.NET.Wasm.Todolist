@@ -1,0 +1,34 @@
+﻿.gantt-container {
+    height: 100%;
+    padding: 0px;
+    margin: unset;
+}
+
+.gantt_tree_content {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gantt_grid_scale,
+.gantt_task_scale,
+.gantt_task_vscroll {
+    background-color: #eee;
+}
+
+    .gantt_grid_scale,
+    .gantt_task_scale,
+    .gantt_task .gantt_task_scale .gantt_scale_cell,
+    .gantt_grid_scale .gantt_grid_head_cell {
+        color: #000;
+        font-size: 12px;
+        border-bottom: 1px solid #cecece;
+        background-color: #eee;
+    }
+
+.gantt_task .gantt_task_scale .gantt_scale_cell {
+    color: #a6a6a6;
+    border-right: 1px solid #ebebeb !important;
+    border-right-width: 1px !important;
+    border-right-style: solid !important;
+    border-right-color: rgb(235, 235, 235) !important;
+}

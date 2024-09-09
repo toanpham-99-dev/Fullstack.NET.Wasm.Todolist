@@ -1,0 +1,5 @@
+﻿@if (!AuthService.IsAuthenticated ||
+    ((ExternalAuthMode && AuthService.Type == AuthenticationTypes.Password && AuthService.IsAuthenticated)))
+{
+    @ChildContent
+}

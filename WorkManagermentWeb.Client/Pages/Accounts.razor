@@ -1,0 +1,764 @@
+﻿@page "/accounts"
+@inject IBoard BoardService
+@inject NavigationManager NavManager
+@inject IJSRuntime js
+@inject IAuthService AuthService
+@inject IStringLocalizer<Resource> localizer
+@inject IUser UserService
+
+
+<div class="row" style="margin:5px">
+    <div class="col">
+        <h4>
+            <i class="fa fa-users"></i> &nbsp; @localizer["Accounts"]
+        </h4>
+    </div>
+    <hr />
+</div>
+
+<p>
+<div class="row mb-3">
+    <div class="col">
+        <div class="d-flex justify-content-start">
+                <Button Type="ButtonType.Button" Color="ButtonColor.Primary" Outline="true" @onclick="HandleCollapseAsync">
+                    <Icon Name="IconName.Filter" /> @localizer["Filter"]</Button>
+                <Button Type="ButtonType.Button" Color="ButtonColor.Danger" Style="@ResetFilterBtnStyle" Outline="true" @onclick="ClearFilter">
+                    ♺ @localizer["Reset Filter"]</Button>
+        </div>
+    </div>
+    <div class="col">
+            <div class="d-flex justify-content-end">
+                <p class="mb-1">
+                    <Button Type="ButtonType.Button" Color="ButtonColor.Success" Outline="true" @onclick="()=>ShowModal(AddAccountModal)">
+                        <Icon Name="IconName.PersonPlus" /> @localizer["Add"]</Button>
+                </p>
+            </div>
+        </div>
+</div>
+<div class="col-md-12 mb-3">
+    <Collapse @ref="Collapse">
+        <Card>
+            <CardBody>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <lable class="fw-bold">@localizer["Box search"]</lable>
+                                <input type="text"
+                                    class="form-control"
+                                    placeholder="@localizer["Search"]"
+                                    step="any"
+                                    @bind-value:event="onchange"
+                                    @oninput="InputChanged"
+                                    @bind-value="FilterRequest.SearchInput" />
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label class="fw-bold">@localizer["Project"]</label>
+                                <select class="form-select" @bind="@FilterRequest.BoardId" @bind:after="SelectChanged">
+                                <option selected="@(FilterRequest.BoardId == Guid.Empty)" hidden>@localizer["Choose Project"]</option>
+                                @foreach (var board in Boards)
+                                {
+                                    <option value=@board.Id>@board.Name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-3">
+                            <label class="fw-bold">@localizer["Role"]</label>
+                                <select class="form-select" @bind="FilterRequest.RoleName" @bind:after="SelectChanged">
+                                <option selected="@(String.IsNullOrEmpty(FilterRequest.RoleName))" hidden>@localizer["Choose Role"]</option>
+                                @foreach (var role in Roles)
+                                {
+                                    <option value=@role.Value>
+                                        @localizer[role.DisplayName]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-3">
+                            <div class="row">
+                                    <label class="fw-bold">@localizer["Status"]</label>
+                            </div>
+                                @* <div class="row" style="margin-left: auto">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="exampleRadios" id="exampleRadios1" value="option1">
+                                        <label class="form-check-label text-success" for="exampleRadios1">
+                                            Active
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="exampleRadios" id="exampleRadios2" value="option2">
+                                        <label class="form-check-label text-danger" for="exampleRadios2">
+                                            Deactive
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="exampleRadios" id="exampleRadios3" value="option3" checked>
+                                        <label class="form-check-label text-secondary" for="exampleRadios3">
+                                            None
+                                        </label>
+                                    </div>
+                                </div> *@
+                            <div class="row">
+                                    <input class="form-check-input"
+                                           style="height:30px; width:30px; margin-left:23px;"
+                                           type="checkbox"
+                                           @oninput="InputChanged"
+                                           @bind="FilterRequest.ActiveStatus"
+                                           id="flexCheckIndeterminate">
+                                    <label style="width:auto; margin-top: 7px;" class="form-check-label fw-bold text-@(FilterRequest.ActiveStatus is null ?
+                                        "secondary" : FilterRequest.ActiveStatus.Value ?
+                                        "success" : "danger")" for="flexCheckIndeterminate">
+                                        @(FilterRequest.ActiveStatus is null ? @localizer["None"] : FilterRequest.ActiveStatus.Value ? @localizer["Active"] : @localizer["Deactive"])
+                                    </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                    <Button Type="ButtonType.Button" Color="ButtonColor.Primary" Style="@ApplyFilterBtnStyle" Outline="true" @onclick="ApplyFilter">
+                        <Icon Name="IconName.FilterSquare" /> @localizer["Apply"]</Button>
+            </CardBody>
+        </Card>
+    </Collapse>
+</div>
+    <Grid TItem="UserDTO"
+      AllowSorting="false"
+      Class="table table-hover table-bordered table-striped"
+      Data="UsersResponse.Users"
+      Responsive="true"
+      RowClass="GetRowClass">
+      <GridColumns>
+            <GridColumn TItem="UserDTO" HeaderText="@localizer["FullName"]" SortKeySelector="item => item.FullName">
+                <a class="pe-auto" href="/account?id=@(context.Id)">
+                    @context.FullName
+                </a>
+          </GridColumn>
+          <GridColumn TItem="UserDTO" HeaderText="@localizer["Username"]" SortKeySelector="item => item.UserName">
+              @context.UserName
+          </GridColumn>
+            <GridColumn TItem="UserDTO" HeaderText="@localizer["AccountType"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+                SortKeySelector="item => item.AccountType">
+                <Badge Color="BadgeColor.Primary" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[context.AccountType.ToString()]</Badge>
+            </GridColumn>
+            <GridColumn TItem="UserDTO" HeaderText="Email" SortKeySelector="item => item.Email">
+              @context.Email
+          </GridColumn>
+            <GridColumn TItem="UserDTO" HeaderText="@localizer["Phone"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End" SortKeySelector="item => item.Phone">
+                @context.Phone
+          </GridColumn>
+            <GridColumn TItem="UserDTO" HeaderText="@localizer["Status"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+            SortKeySelector="item => item.ActiveStatus">
+                @if (context.ActiveStatus)
+                {
+                    <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer["Active"]</Badge>
+                }
+                else
+                {
+                    <Badge Color="BadgeColor.Danger" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer["Deactive"]</Badge>
+                }
+          </GridColumn>
+            <GridColumn TItem="UserDTO" HeaderText="@localizer["Role"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+            SortKeySelector="item => item.Role.DisplayName">
+                @if (@context.Role.Value.Equals(UserRoleConstants.Member))
+                {
+                    <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[context.Role.DisplayName]</Badge>
+                }
+                else if (@context.Role.Value.Equals(UserRoleConstants.CEO))
+                {
+                    <Badge Color="BadgeColor.Warning" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[context.Role.DisplayName]</Badge>
+                }
+                else
+                {
+                    <Badge Color="BadgeColor.Info" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[context.Role.DisplayName]</Badge>
+                }
+          </GridColumn>
+            <GridColumn TItem="UserDTO" HeaderText="@localizer["Action"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+                @if (context.ActiveStatus)
+                {
+                    <Button Color="ButtonColor.Danger" Outline="true" @onclick="()=>HandleComfirm(context.Id, false)" Size="Size.ExtraSmall">
+                        <Tooltip Title="@localizer["Deactive"]" role="button">
+                            <Icon Name="IconName.PersonFillX"></Icon>
+                        </Tooltip>
+                    </Button>
+                }
+                else
+                {
+                    <Button Color="ButtonColor.Success" Outline="true" @onclick="()=>HandleComfirm(context.Id, true)" Size="Size.ExtraSmall">
+                        <Tooltip Title="@localizer["Active"]" role="button">
+                            <Icon Name="IconName.PersonFillCheck"></Icon>
+                        </Tooltip>
+                    </Button>
+                }
+                <Button Color="ButtonColor.Primary" Outline="true" @onclick="()=>NavToDetail(context.Id, true)" Size="Size.ExtraSmall">
+                    <Tooltip Title="@localizer["Change Profile"]" role="button">
+                        <Icon Name="IconName.PersonVCard"></Icon>
+                    </Tooltip>
+                </Button>
+            </GridColumn>
+        </GridColumns>
+</Grid>
+    <div class="row mb-3">
+        <div class="col">
+            <div class="d-flex justify-content-start">
+
+            </div>
+        </div>
+        <div class="col">
+            <div class="d-flex justify-content-end">
+                <Pagination Style="width: fit-content"
+                            ActivePageNumber="@CurrentPageNumber"
+                            TotalPages="@PageCount"
+                            DisplayPages="5"
+                            PageChanged="OnPageChangedAsync"
+                            FirstLinkIcon="IconName.ChevronDoubleLeft"
+                            PreviousLinkIcon="IconName.ChevronLeft"
+                            NextLinkIcon="IconName.ChevronRight"
+                            LastLinkIcon="IconName.ChevronDoubleRight" />
+            </div>
+        </div>
+    </div>
+</p>
+
+<Modal @ref="ResponseModal" OnHidden="OnModalHidden" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer[ResponseMessage]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="()=>HideModall(ResponseModal)">✖ @localizer["Close"]</Button>
+    </FooterTemplate>
+</Modal>
+<Modal @ref="ConfirmModal" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer["Are you sure with this action?"]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="()=>HideModall(ConfirmModal)">✖ @localizer["No"]</Button>
+        <Button Color="ButtonColor.Primary" @onclick="AcceptAction">✔ @localizer["Yes"]</Button>
+    </FooterTemplate>
+</Modal>
+<Modal @ref="AddAccountModal" OnShowing="OnShowAddAccountModal">
+    <HeaderTemplate>✚ @localizer["New Account"]</HeaderTemplate>
+    <BodyTemplate>
+        <EditForm EditContext="EditContext" OnValidSubmit="AddAccountAsync" Enhance>
+            <DataAnnotationsValidator />
+            <div class="form-group mb-3 mt-3">
+                <FloatingText @bind-Value="UserDTO.FullName"
+                              class="form-control"
+                              Type="text"
+                              Placeholder="@localizer["Full Name"]"
+                              Label="@localizer["Full Name"]" />
+                <ValidationMessage For="()=>UserDTO.FullName" />
+            </div>
+            <div class="form-group mb-3">
+                <FloatingText @bind-Value="UserDTO.UserName"
+                              class="form-control"
+                              Type="text"
+                              Placeholder="@localizer["Username"]"
+                              Label="@localizer["Username"]" />
+                <ValidationMessage For="()=>UserDTO.UserName" />
+            </div>
+            <div class="form-group mb-3">
+                <FloatingText @bind-Value="UserDTO.Email"
+                              class="form-control"
+                              Type="email"
+                              Placeholder="Email"
+                              Label="Email" />
+                <ValidationMessage For="()=>UserDTO.Email" />
+            </div>
+            <div class="form-group mb-3">
+                <FloatingText @bind-Value="UserDTO.Phone"
+                              class="form-control"
+                              Type="text"
+                              Placeholder="@localizer["Phone Number"]"
+                              Label="@localizer["Phone Number"]" />
+                <ValidationMessage For="()=>UserDTO.Phone" />
+            </div>
+            <div class="mb-3">
+                <div class="input-wrap">
+                    <label>@localizer["Role"]</label>
+                    <select style="width: 100%;" @bind="UserDTO.RoleName">
+                        <option value="" hidden>@localizer["Choose Role"]</option>
+                        @foreach (var role in Roles)
+                        {
+                            <option value=@role.Value>
+                                @localizer[role.DisplayName]
+                            </option>
+                        }
+                    </select>
+                </div>
+                <ValidationMessage For="()=>UserDTO.RoleName" />
+            </div>
+            <div class="form-group mb-3">
+                <FloatingText class="form-control"
+                              Type="@(ShowPassword is true? "text":"password")"
+                              @bind-Value="UserDTO.Password"
+                              Placeholder="@localizer["Password"]"
+                              Label="@localizer["Password"]">
+                </FloatingText>
+                <ValidationMessage For="()=>UserDTO.Password" />
+            </div>
+            <div class="form-group mb-3">
+                <FloatingText class="form-control"
+                              Type="@(ShowPassword is true? "text":"password")"
+                              @bind-Value="UserDTO.ConfirmPassword"
+                              Placeholder="@localizer["Confirm Password"]"
+                              Label="@localizer["Confirm Password"]">
+                </FloatingText>
+                <ValidationMessage For="()=>UserDTO.ConfirmPassword" />
+            </div>
+            @* <div class="mb-3">
+                <input class="form-check-input"
+                       style="height:17px; width:17px"
+                       type="checkbox"
+                       checked=@ShowPassword
+                       @onchange="eventArgs => { ShowPasswordCheckboxClicked(eventArgs.Value!); }">
+                <label class="ms-1 fw-bold" style="margin-top: 1px">@localizer["Show Password"]</label>
+            </div> *@
+            <div class="form-group">
+                <div class="d-grid gap-2 mb-3">
+                    <Button @ref="AddAccountBtn" Class="btn btn-success"
+                            Type="ButtonType.Submit">
+                        <Icon Name="IconName.PersonAdd" /> @localizer["Add"]
+                    </Button>
+                </div>
+            </div>
+        </EditForm>
+    </BodyTemplate>
+</Modal>
+@code {
+    /// <summary>
+    /// PreloadService
+    /// </summary>
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    /// <summary>
+    /// AddAccountModal
+    /// </summary>
+    private Modal AddAccountModal = default!;
+
+    /// <summary>
+    /// ResponseModal
+    /// </summary>
+    private Modal ResponseModal = default!;
+
+    /// <summary>
+    /// ConfirmModal
+    /// </summary>
+    private Modal ConfirmModal = default!;
+
+    /// <summary>
+    /// AddAccountBtn
+    /// </summary>
+    private Button AddAccountBtn = default!;
+
+    /// <summary>
+    /// Collapse
+    /// </summary>
+    private Collapse Collapse = default!;
+
+    /// <summary>
+    /// SelectedUser
+    /// </summary>
+    private ActiveStatusDTO SelectedUser = new();
+
+    /// <summary>
+    /// UserDTO
+    /// </summary>
+    private RegisterUserDTO UserDTO = new();
+
+    /// <summary>
+    /// EditContext
+    /// </summary>
+    private EditContext EditContext = new(new RegisterUserDTO());
+
+    /// <summary>
+    /// FilterRequest
+    /// </summary>
+    private UsersDTO FilterRequest = new();
+
+    /// <summary>
+    /// Board
+    /// </summary>
+    private BoardDTO Board = new();
+
+    /// <summary>
+    /// Boards
+    /// </summary>
+    private List<BoardDTO> Boards = new List<BoardDTO>();
+
+    /// <summary>
+    /// UsersResponse
+    /// </summary>
+    private UsersResponse UsersResponse = new(new List<UserDTO>(), 0);
+
+    /// <summary>
+    /// ResponseMessage
+    /// </summary>
+    private string ResponseMessage = string.Empty;
+
+    /// <summary>
+    /// Roles
+    /// </summary>
+    private List<RoleDTO> Roles = new List<RoleDTO>();
+
+    /// <summary>
+    /// NewAccountResponse
+    /// </summary>
+    private RegistrationResponse NewAccountResponse = new(false, string.Empty);
+
+    /// <summary>
+    /// IsShowedFilters
+    /// </summary>
+    private bool IsShowedFilters;
+
+    /// <summary>
+    /// BtnStyle
+    /// </summary>
+    private string ResetFilterBtnStyle = "visibility:hidden";
+
+    /// <summary>
+    /// ApplyFilterBtnStyle
+    /// </summary>
+    private string ApplyFilterBtnStyle = "visibility:hidden";
+
+    /// <summary>
+    /// CurrentPageNumber
+    /// </summary>
+    private int CurrentPageNumber = 1;
+
+    /// <summary>
+    /// AmountPerPage
+    /// </summary>
+    private int AmountPerPage = 8;
+
+    /// <summary>
+    /// PageCount
+    /// </summary>
+    private int PageCount = 0;
+
+    /// <summary>
+    /// ShowPassword
+    /// </summary>
+    private bool ShowPassword;
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+        ShowSpinner();
+        ClearFilter();
+        await GetBoardsAsync();
+        await GetRolesAsync();
+        FilterRequest.Paging.Take = AmountPerPage;
+        UsersResponse = await UserService.GetListAsync(FilterRequest);
+        HandlePageCount();
+        HideSpinner();
+    }
+
+    /// <summary>
+    /// SetUpEditContext
+    /// </summary>
+    private void SetUpEditContext()
+    {
+        EditContext = new EditContext(UserDTO);
+        EditContext.OnFieldChanged += HandleFieldChanged!;
+    }
+
+    /// <summary>
+    /// HandleFieldChanged
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void HandleFieldChanged(object sender, FieldChangedEventArgs e)
+    {
+        EditContext.Validate();
+    }
+
+    /// <summary>
+    /// GetRolesAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetRolesAsync()
+    {
+        Roles = (await UserService.GetRolesAsync().ConfigureAwait(false)).RoleDTOs;
+    }
+
+    /// <summary>
+    /// GetBoardsAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetBoardsAsync()
+    {
+        GetBoardsResponse response = await BoardService.GetListAsync(new GetBoardsDTO());
+        Boards.AddRange(response.Boards);
+    }
+
+    /// <summary>
+    /// ClearFilter
+    /// </summary>
+    private void ClearFilter()
+    {
+        FilterRequest = new();
+        FilterRequest.Paging.Take = AmountPerPage;
+        ResetFilterBtnStyle = "visibility:hidden";
+        ApplyFilterBtnStyle = "visibility:hidden";
+    }
+
+    /// <summary>
+    /// ApplyFilter
+    /// </summary>
+    /// <returns></returns>
+    private async Task ApplyFilter()
+    {
+        CurrentPageNumber = 1;
+        UsersResponse = await UserService.GetListAsync(FilterRequest);
+        HandlePageCount();
+        ResetFilterBtnStyle = string.Empty;
+    }
+
+    /// <summary>
+    /// HandleCollapseAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task HandleCollapseAsync()
+    {
+        IsShowedFilters = !IsShowedFilters;
+        if (!IsShowedFilters)
+            await Collapse.HideAsync();
+        else
+            await Collapse.ShowAsync();
+    }
+
+    /// <summary>
+    ///GetRowClass
+    /// </summary>
+    /// <param name="user"></param>
+    /// <returns></returns>
+    private string GetRowClass(UserDTO user)
+    {
+        if (!user.ActiveStatus)
+            return "align-middle table-danger";
+        return "align-middle table-success";
+    }
+
+    /// <summary>
+    /// AddAccountAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task AddAccountAsync()
+    {
+        AddAccountBtn.ShowLoading(@localizer["Loading..."]);
+        if (!string.IsNullOrEmpty(UserDTO.Phone))
+        {
+            UserDTO.IsPhoneComfirmed = true;
+        }
+        UserDTO.ActiveStatus = true;
+        UserDTO.IsEmailComfirmed = true;
+        NewAccountResponse = await UserService.RegisterAsync(UserDTO);
+        await HideModall(AddAccountModal);
+        UserDTO = new();
+        if (NewAccountResponse is not null)
+        {
+            ResponseMessage = NewAccountResponse.Message;
+            await ShowModal(ResponseModal);
+        }
+        AddAccountBtn.HideLoading();
+    }
+
+    /// <summary>
+    /// DeactiveAccount
+    /// </summary>
+    /// <returns></returns>
+    private async Task ChangeStatusAsync()
+    {
+        var response = await UserService.ChangeActiveStatusAsync(new ActiveStatusDTO
+            {
+                UserId = SelectedUser.UserId,
+                Status = SelectedUser.Status
+            }).ConfigureAwait(false);
+        if (response.Flag)
+        {
+            UpdateUserDTO(SelectedUser.UserId, SelectedUser.Status);
+        }
+        else
+        {
+            ResponseMessage = response.Message!;
+            await ShowModal(ResponseModal);
+        }
+    }
+
+    /// <summary>
+    /// UpdateUserDTO
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <param name="status"></param>
+    private void UpdateUserDTO(string userId, bool status)
+    {
+        UserDTO? userDTO = UsersResponse.Users.FirstOrDefault(_ => _.Id == SelectedUser.UserId);
+        if (userDTO is not null)
+        {
+            userDTO.ActiveStatus = status;
+        }
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// HandlePageCount
+    /// </summary>
+    /// <returns></returns>
+    private void HandlePageCount()
+    {
+        int temp = UsersResponse.Total / AmountPerPage;
+        if (temp * AmountPerPage != UsersResponse.Total) temp += 1;
+        PageCount = temp;
+    }
+
+    /// <summary>
+    /// OnPageChangedAsync
+    /// </summary>
+    /// <param name="newPageNumber"></param>
+    /// <returns></returns>
+    private async Task OnPageChangedAsync(int newPageNumber)
+    {
+        await Task.Run(async () =>
+        {
+            CurrentPageNumber = newPageNumber;
+            FilterRequest.Paging.Skip = (CurrentPageNumber - 1) * AmountPerPage;
+            UsersResponse = await UserService.GetListAsync(FilterRequest);
+            HandlePageCount();
+        });
+    }
+
+    /// <summary>
+    /// HandleComfirm
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <param name="newStatus"></param>
+    /// <returns></returns>
+    private async Task HandleComfirm(string userId, bool newStatus)
+    {
+        SelectedUser = new()
+        {
+            UserId = userId,
+            Status = newStatus
+        };
+        await ShowModal(ConfirmModal);
+    }
+
+    /// <summary>
+    /// AcceptAction
+    /// </summary>
+    /// <returns></returns>
+    private async Task AcceptAction()
+    {
+        await HideModall(ConfirmModal);
+        await ChangeStatusAsync();
+    }
+
+    /// <summary>
+    /// ShowPasswordCheckboxClicked
+    /// </summary>
+    /// <param name="isCheck"></param>
+    private void ShowPasswordCheckboxClicked(object isCheck) => ShowPassword = !ShowPassword;
+
+    /// <summary>
+    /// NavToDetail
+    /// </summary>
+    /// <param name="id"></param>
+    /// <param name="editMode"></param>
+    private void NavToDetail(string id, bool editMode)
+    {
+        NavManager.NavigateTo($"/account?id={id}&editmode={editMode}");
+    }
+
+    /// <summary>
+    /// OnShowAddAccountModal
+    /// </summary>
+    private void OnShowAddAccountModal()
+    {
+        UserDTO = new();
+        SetUpEditContext();
+    }
+
+    /// <summary>
+    /// ShowModal
+    /// </summary>
+    /// <param name="modal"></param>
+    /// <returns></returns>
+    private async Task ShowModal(Modal modal)
+    {
+        await modal.ShowAsync();
+    }
+
+    /// <summary>
+    /// HideModall
+    /// </summary>
+    /// <returns></returns>
+    private async Task HideModall(Modal modal)
+    {
+        await modal.HideAsync();
+    }
+
+    /// <summary>
+    /// OnModalHidden
+    /// </summary>
+    private void OnModalHidden()
+    {
+        if (NewAccountResponse.Flag)
+        {
+            NavManager.NavigateTo($"account?id={NewAccountResponse.Id}");
+        }
+    }
+
+    /// <summary>
+    /// InputChanged
+    /// </summary>
+    private void InputChanged(ChangeEventArgs args)
+    {
+        if (args.Value is not null && !string.IsNullOrEmpty(args.Value.ToString()))
+        {
+            ApplyFilterBtnStyle = string.Empty;
+        }
+        else if (FilterRequest.ActiveStatus is null && FilterRequest.BoardId == Guid.Empty && String.IsNullOrEmpty(FilterRequest.RoleName))
+        {
+            ApplyFilterBtnStyle = "visibility:hidden";
+        }
+    }
+
+    /// <summary>
+    /// SelectChanged
+    /// </summary>
+    private void SelectChanged()
+    {
+        ApplyFilterBtnStyle = string.Empty;
+    }
+
+    /// <summary>
+    /// ShowSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void ShowSpinner()
+    {
+        PreloadService.Show(SpinnerColor.Light);
+    }
+
+    /// <summary>
+    /// HideSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void HideSpinner()
+    {
+        PreloadService.Hide();
+    }
+}

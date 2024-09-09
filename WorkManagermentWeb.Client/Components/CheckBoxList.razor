@@ -1,0 +1,87 @@
+﻿@typeparam TItem
+<div style=@Style>
+    @if (Data != null)
+    {
+        foreach (var item in Data)
+        {
+            var Text = TextField?.Invoke(item);
+            var Value = ValueField?.Invoke(item).ToString();
+            bool Checked = false;
+            if (SelectedValues.Contains(Value!))
+            {
+                Checked = true;
+            }
+            <input class="ms-3" type="checkbox" checked=@Checked
+                   @onchange="eventArgs => { CheckboxClicked(Value!, eventArgs.Value!); }" />
+            <label class="ms-1">@Text</label>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// Data
+    /// </summary>
+    [Parameter] public IEnumerable<TItem> Data { get; set; } = new List<TItem>();
+
+    /// <summary>
+    /// TextField
+    /// </summary>
+    [Parameter]
+    public Func<TItem, string> TextField { get; set; } = default!;
+
+    /// <summary>
+    /// ValueField
+    /// </summary>
+    [Parameter] public Func<TItem, object> ValueField { get; set; } = default!;
+
+    /// <summary>
+    /// Style
+    /// </summary>
+    [Parameter] public string Style { get; set; } = default!;
+
+    /// <summary>
+    /// SelectedValues
+    /// </summary>
+    [Parameter] public List<string> SelectedValues { get; set; } = default!;
+
+    /// <summary>
+    /// OnValueChange
+    /// </summary>
+    [Parameter]
+    public EventCallback OnValueChange { get; set; }
+
+    /// <summary>
+    /// DoneClicked
+    /// </summary>
+    /// <returns></returns>
+    protected async Task DoneClicked()
+    {
+        await OnValueChange.InvokeAsync();
+    }
+
+    /// <summary>
+    /// CheckboxClicked
+    /// </summary>
+    /// <param name="selectedId"></param>
+    /// <param name="isChecked"></param>
+    public async void CheckboxClicked(string selectedId, object isChecked)
+    {
+        if ((bool)isChecked)
+        {
+            if (!SelectedValues.Contains(selectedId))
+            {
+                SelectedValues.Add(selectedId);
+            }
+        }
+        else
+        {
+            if (SelectedValues.Contains(selectedId))
+            {
+                SelectedValues.Remove(selectedId);
+            }
+        }
+        await DoneClicked();
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,75 @@
+﻿@using Blazored.LocalStorage
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.WebAssembly.Authentication
+@using WorkManagermentWeb.Client.Authentication
+@inject NavigationManager NavManager
+@inject ILocalStorageService localStorageService
+@inject IAuthService AuthService
+@inject IStringLocalizer<Resource> localizer
+
+<DropdownItem @onclick="BeginLogout">
+    <Icon Name="IconName.DoorOpenFill" /> @localizer["Logout"]
+</DropdownItem>
+
+@code{
+    /// <summary>
+    /// User
+    /// </summary>
+    private ClaimsPrincipal? ClaimsPrincipal = new();
+
+    /// <summary>
+    /// BeginLogout
+    /// </summary>
+    /// <returns></returns>
+    public async Task BeginLogout()
+    {
+        if (AuthService.IsAuthenticated == true)
+        {
+            await AuthService.UpdateAuthenticationState(null!);
+            NavManager.NavigateTo("/login");
+
+            // switch (AuthService.Type)
+            // {
+            //     case AuthenticationTypes.Password:
+            //         await OriginLogout();
+            //         break;
+            //     case AuthenticationTypes.Negotiate:
+            //         MSLogout();
+            //         break;
+            // }
+        }
+    }
+
+    /// <summary>
+    /// OriginLogout
+    /// </summary>
+    /// <returns></returns>
+    private async Task OriginLogout()
+    {
+        await AuthService.UpdateAuthenticationState(null!);
+        await ClearTokenAsync();
+        NavManager.NavigateTo("/login");
+    }
+
+    /// <summary>
+    /// MSLogout
+    /// </summary>
+    /// <returns></returns>
+    private void MSLogout()
+    {
+        NavManager.NavigateToLogout("authentication/logout", "/");
+    }
+
+    /// <summary>
+    /// ClearTokenAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task ClearTokenAsync()
+    {
+        string? stringToken = await localStorageService.GetItemAsStringAsync("token");
+
+        if (!string.IsNullOrWhiteSpace(stringToken))
+            await localStorageService.RemoveItemAsync("token");
+    }
+}

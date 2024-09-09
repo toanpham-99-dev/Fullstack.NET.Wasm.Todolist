@@ -1,0 +1,52 @@
+﻿@page "/email-comfirmed"
+@inject IStringLocalizer<Resource> localizer
+@inject NavigationManager NavManager
+@using System.Diagnostics
+
+<PageTitle>@localizer["Email Comfirmed"]</PageTitle>
+
+<div class="row" style="margin:5px">
+    <div class="col">
+        <h4>@localizer[Title]</h4>
+        <p role="alert">@localizer[Content]</p>
+    </div>
+</div>
+
+@code{
+    /// <summary>
+    /// Title
+    /// </summary>
+    private string Title = "Email Comfirmed Successfully!";
+
+    /// <summary>
+    /// Content
+    /// </summary>
+    private string Content = "Your email was confirmed succesfully!. Now you can manage task on our system.";
+
+    /// <summary>
+    /// Flag
+    /// </summary>
+    public bool Flag;
+
+    /// <summary>
+    /// OnInitialized
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        GetQueryString();
+        if (!Flag)
+        {
+            Title = "Email Sent Successfully!";
+            Content = "We sent to you recover password email. Please check inbox to countinue.";
+        }
+    }
+
+    /// <summary>
+    /// GetQueryString
+    /// </summary>
+    private void GetQueryString()
+    {
+        NavManager.TryGetQueryString<bool>(nameof(Flag), out Flag);
+    }
+
+}

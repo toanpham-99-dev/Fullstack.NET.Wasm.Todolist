@@ -1,0 +1,12 @@
+﻿@page "/bad-request"
+@inject IStringLocalizer<Resource> localizer
+@using System.Diagnostics
+
+<PageTitle>@localizer["Bad Request"]</PageTitle>
+
+<div class="row" style="margin:5px">
+    <div class="col">
+        <h4>@localizer["Status code 400 - Bad Request"]</h4>
+        <p role="alert">@localizer["Your request is not valid. The server cannot process this request due to there is something wrong with your request."]</p>
+    </div>
+</div>

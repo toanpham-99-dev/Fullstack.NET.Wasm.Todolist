@@ -1,0 +1,357 @@
+﻿@using System.Security.Claims
+@using Microsoft.Extensions.Options
+@using Newtonsoft.Json
+@using WorkManagermentWeb.Application.Constants
+@using WorkManagermentWeb.Client.Authentication
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@inject NavigationManager NavManager
+@inject INotification NotificationService
+@inject IOptions<WorkManagermentWeb.Pusher.Options.PusherOptions> PusherOptions
+@inject IAuthService AuthService
+@inject IJSRuntime js
+@inject ILocalStorageService localStorageService
+@inject IStringLocalizer<Resource> localizer
+@inherits LayoutComponentBase
+
+<div class="bb-page">
+    <Sidebar @ref="Sidebar"
+             IconName="IconName.PersonWorkspace"
+             Title="REDMINE 2.0"
+             DataProvider="SidebarDataProvider"
+             Width="350"
+             WidthUnit="Unit.Px" />
+
+    <main>
+        <div class="bb-top-row px-4">
+            <div class="col-md-1">
+                <Icon Name="IconName.List" role="button" @onclick="ToggleSidebar" />
+            </div>
+            <div class="col d-flex justify-content-end">
+                <CustomAuthorized>
+                    <p class="mb-1">
+                        <Button Type="ButtonType.Button" Color="ButtonColor.Secondary" Outline="true" Position="Position.Relative" @onclick="ShowNotiComponent">
+                            <Icon Name="IconName.Bell" />
+                            <Badge Color="BadgeColor.Danger" id="badge-noti"
+                                   Position="Position.Absolute"
+                                   Placement="BadgePlacement.TopRight"
+                                   IndicatorType="BadgeIndicatorType.RoundedPill"
+                                   VisuallyHiddenText="unread messages"
+                                   style="@BagdeVisibility"></Badge>
+                        </Button>
+                        <Dropdown Color="DropdownColor.Secondary">
+                            <DropdownToggleButton >
+                                <Icon Name="IconName.PersonCircle" />
+                                @AuthService.User.UserName
+                            </DropdownToggleButton>
+                            <DropdownMenu Class="p-4 text-muted">
+                                <DropdownHeader><label class="fw-bold">@localizer["Account"]</label></DropdownHeader>
+                                <DropdownItem>
+                                    @AuthService.User.UserName
+                                </DropdownItem>
+                                <DropdownItem To="" @onclick="NavToAccountDetail">@localizer["Manage account"]</DropdownItem>
+                                <DropdownHeader><label class="fw-bold">@localizer["Language"]</label></DropdownHeader>
+                                <CultureSelector />
+                                <DropdownDivider>Dropdown header</DropdownDivider>
+                                <Logout />
+                            </DropdownMenu>
+                        </Dropdown>
+                    </p>
+                </CustomAuthorized>
+                <CustomNotAuthorized>
+                    <p class="mb-1">
+                        <Button Color="ButtonColor.Success" Outline="true" @onclick="Login"><span><Icon Name="IconName.DoorOpenFill" /> @localizer["Login"] </span></Button>
+                        <Button Color="ButtonColor.Success" Outline="false" @onclick="Signup"><span><Icon Name="IconName.PersonAdd" /> @localizer["SignUp"] </span></Button>
+                    </p>
+                </CustomNotAuthorized>
+            </div>
+        </div>
+
+        <article class="content px-4">
+            <div class="py-2">@Body</div>
+        </article>
+    </main>
+    
+    <Offcanvas @ref="Offcanvas">
+        <FooterTemplate>
+            <Button Color="ButtonColor.Primary" @onclick="MarkAllAsRead">🗸 @localizer["Mark All As Read"]</Button>
+        </FooterTemplate>
+    </Offcanvas>
+    <Preload LoadingText="@localizer["Loading..."]" />
+    
+</div>
+@code{
+    /// <summary>
+    /// applyPurpleStyle
+    /// </summary>
+    private bool ApplyPurpleStyle = false;
+
+    /// <summary>
+    /// Offcanvas
+    /// </summary>
+    private Offcanvas Offcanvas = default!;
+
+    /// <summary>
+    /// sidebar
+    /// </summary>
+    private Sidebar Sidebar = default!;
+
+    /// <summary>
+    /// BagdeVisibility
+    /// </summary>
+    private string BagdeVisibility = string.Empty;
+
+    /// <summary>
+    /// 
+    /// </summary>
+    private List<NavItem> NavItems = default!;
+
+    /// <summary>
+    /// NotiListResponse
+    /// </summary>
+    public GetListNotiResponse NotiListResponse { get; set; } = new(0, new());
+
+    /// <summary>
+    /// NotiCurrentPaging
+    /// </summary>
+    private PagingDTO NotiCurrentPaging = new()
+        {
+            Skip = 0,
+            Take = 6
+        };
+
+    /// <summary>
+    /// User
+    /// </summary>
+    private ClaimsPrincipal? ClaimsPrincipal = new();
+
+    /// <summary>
+    /// NotificationComponent
+    /// </summary>
+    protected Components.Notification Notification = new();
+
+    /// <summary>
+    /// IsPusherSetup
+    /// </summary>
+    private bool IsPusherSetup = false;
+
+    /// <summary>
+    /// Culture
+    /// </summary>
+    private string Culture = string.Empty;
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            return;
+        }
+        await GetCulture();
+        await SetupPusher();
+        await SetupNotiAsync();
+    }
+
+    /// <summary>
+    /// InitGantt
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetCulture()
+    {
+        Culture = (await localStorageService.GetItemAsStringAsync("culture"))!;
+    }
+
+    /// <summary>
+    /// SetupNotiAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task SetupNotiAsync()
+    {
+        NotiListResponse = await GetNotiListAsync(new PagingDTO
+        {
+            Skip = 0,
+            Take = 6
+        });
+        if (NotiListResponse is not null)
+        {
+            BagdeVisibility = NotiListResponse.Notifications.Any(_ => !_.IsRead)
+            ? "visibility: visible" : "visibility: hidden";
+        }
+    }
+
+    /// <summary>
+    /// SidebarDataProvider
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<SidebarDataProviderResult> SidebarDataProvider(SidebarDataProviderRequest request)
+    {
+        if (NavItems is null)
+            NavItems = await GetNavItems();
+
+        return await Task.FromResult(request.ApplyTo(NavItems));
+    }
+
+    /// <summary>
+    /// GetNavItems
+    /// </summary>
+    /// <returns></returns>
+    private async Task<List<NavItem>> GetNavItems()
+    {
+        NavItems = new List<NavItem>();
+        await Task.Delay(2000);
+        if (AuthService.User is not null)
+        {
+            NavItems = new List<NavItem>
+            {
+                new NavItem { Id = "1", Href = "/projects", IconName = IconName.BagPlusFill, Text = localizer["Projects"], IconColor = IconColor.Primary},
+                new NavItem { Id = "2", Href = "/tasks", IconName = IconName.ListCheck, Text = localizer["Tasks"], IconColor = IconColor.Success},
+                new NavItem { Id = "3", Href = $"/gantt?culture={Culture}", IconName = IconName.BarChartSteps, Text = localizer["Gantt Chart"], IconColor = IconColor.Danger},
+                new NavItem { Id = "4", Href = "/calendar", IconName = IconName.Calendar, Text = localizer["Calendar"], IconColor = IconColor.Warning}
+            };
+            if (AuthService.User.Role.Value == UserRoleConstants.CEO)
+            {
+                NavItems.Add(new NavItem { Id = "5", Href = "/accounts", IconName = IconName.PersonVCard, Text = localizer["Accounts"], IconColor = IconColor.White });
+            }
+        }
+        return NavItems;
+    }
+
+    /// <summary>
+    /// Signup
+    /// </summary>
+    private void Signup()
+    {
+        NavManager.NavigateTo("/register");
+    }
+
+    /// <summary>
+    /// Login
+    /// </summary>
+    private void Login()
+    {
+        NavManager.NavigateTo("/login");
+    }
+
+    private void NavToAccountDetail()
+    {
+        NavManager.NavigateTo($"/account?id={AuthService.User.Id}");
+    }
+
+    /// <summary>
+    /// ShowNotiComponent
+    /// </summary>
+    /// <returns></returns>
+    private async Task ShowNotiComponent()
+    {
+        Notification = new();
+        NotiListResponse = await GetNotiListAsync(new PagingDTO
+        {
+            Skip = 0,
+            Take = 6
+        });
+        var parameters = new Dictionary<string, object>();
+        parameters.Add(nameof(NotiListResponse), NotiListResponse);
+        parameters.Add(nameof(ShowMoreNoti), EventCallback.Factory.Create<MouseEventArgs>(this, ShowMoreNoti));
+        parameters.Add(nameof(HideOffcanvas), EventCallback.Factory.Create<MouseEventArgs>(this, HideOffcanvas));
+        await Offcanvas.ShowAsync<Components.Notification>(title: "🕭 "+ localizer["Notifications"], parameters: parameters);
+    }
+
+    /// <summary>
+    /// SetupPusher
+    /// </summary>
+    /// <returns></returns>
+    async Task SetupPusher()
+    {
+        if (!IsPusherSetup)
+        {
+            await js.InvokeAsync<string>("PusherFunctions.initPusher", AuthService.User.Id);
+            IsPusherSetup = true;
+        }
+    }
+
+    /// <summary>
+    /// ShowMoreNoti
+    /// </summary>
+    /// <returns></returns>
+    private async Task ShowMoreNoti()
+    {
+        var response = await NotificationService.GetListAsync(new GetListNotiDTO
+            {
+                Language = Culture,
+                Paging = new PagingDTO
+                {
+                    Skip = NotiCurrentPaging.Skip + NotiCurrentPaging.Take,
+                    Take = NotiCurrentPaging.Take
+                }
+            });
+        NotiListResponse.Notifications.AddRange(response.Notifications);
+        NotiCurrentPaging.Skip += NotiCurrentPaging.Take;
+    }
+
+    /// <summary>
+    /// GetNotiListAsync
+    /// </summary>
+    /// <returns></returns>
+    public async Task<GetListNotiResponse> GetNotiListAsync(PagingDTO paging)
+    {
+        return await NotificationService.GetListAsync(new GetListNotiDTO
+            {
+                Language = Culture,
+                Paging = new PagingDTO
+                {
+                    Skip = paging.Skip,
+                    Take = paging.Take
+                }
+            });
+    }
+
+    /// <summary>
+    /// MarkAllAsRead
+    /// </summary>
+    /// <returns></returns>
+    private async Task MarkAllAsRead()
+    {
+        NotiListResponse.Notifications.ForEach(_ => _.IsRead = true);
+        BagdeVisibility = "visibility: hidden";
+        await NotificationService.MarkAllAsReadAsync("");
+    }
+
+    private async Task HideOffcanvas(MouseEventArgs e) => await Offcanvas.HideAsync();
+
+    /// <summary>
+    /// ToggleSidebar
+    /// </summary>
+    private void ToggleSidebar() => Sidebar.ToggleSidebar();
+}
+@if (!ApplyPurpleStyle)
+{
+    <style>
+        :root {
+            --bb-sidebar-width: 270px;
+            --bb-sidebar-collapsed-width: 50px;
+            --bb-sidebar-background-color: rgba(234, 234, 234, 1);
+            --bb-sidebar-top-row-background-color: rgba(0,0,0,0.08);
+            --bb-sidebar-top-row-border-color: rgb(194,192,192);
+            --bb-sidebar-title-text-color: rgb(0,0,0);
+            --bb-sidebar-brand-icon-color: #6f42c1;
+            --bb-sidebar-brand-image-width: 24px;
+            --bb-sidebar-brand-image-height: 24px;
+            --bb-sidebar-title-badge-text-color: rgb(255,255,255);
+            --bb-sidebar-title-badge-background-color: rgba(25,135,84,var(--bs-bg-opacity,1));
+            --bb-sidebar-navbar-toggler-icon-color: rgb(0,0,0);
+            --bb-sidebar-navbar-toggler-background-color: rgba(0,0,0,0.08);
+            --bb-sidebar-content-border-color: rgb(194,192,192);
+            --bb-sidebar-nav-item-text-color: rgba(0,0,0,0.9);
+            --bb-sidebar-nav-item-text-active-color-rgb: 0,0,0;
+            --bb-sidebar-nav-item-text-hover-color: rgba(var(--bb-sidebar-nav-item-text-active-color-rgb),0.9);
+            --bb-sidebar-nav-item-text-active-color: rgba(var(--bb-sidebar-nav-item-text-active-color-rgb),0.9);
+            --bb-sidebar-nav-item-background-hover-color: rgba(var(--bb-sidebar-nav-item-text-active-color-rgb),0.08);
+            --bb-sidebar-nav-item-group-background-color: rgba(var(--bb-sidebar-nav-item-text-active-color-rgb),0.08);
+        }
+    </style>
+}
+<script src="../js/Toast.js"></script>

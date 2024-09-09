@@ -1,0 +1,1248 @@
+﻿@page "/account/"
+@using WorkManagermentWeb.Application.Attributes
+@inject NavigationManager NavManager
+@inject IUser UserService
+@inject IAuthService AuthService
+@inject IStringLocalizer<Resource> localizer
+@inject IJSRuntime js
+@inject IMicrosoftCalendarService microsoftCalendarService
+@inject ICalendar calendarService
+
+<body>
+    <div class="container-wrapper">
+        <div class="container-fluid">
+            <div class="heading clearfix">
+                <div class="pull-left">
+                    <h4><i class="fa fa-user"></i> &nbsp; @localizer["Account Details"]</h4>
+                </div>
+                <div class="pull-right">
+                    <span><u style="cursor:pointer" @onclick="()=>ShowModal(UpdateProfileModal)"><i class="fa fa-credit-card"></i> @localizer["Edit Profile"]</u>  </span>
+                    @if (UserDTO.AccountType == AccountType.Internal)
+                    {
+                        <span style="margin-left:10px"><u @onclick="()=>ShowModal(UpdatePasswordModal)"><i class="fa fa-key"></i> @localizer["Change Password"]</u>  </span>
+                    }
+                    @if (UserDTO.ExternalAccountConnected == true && AuthService.User.Id == UserDTO.Id && UserDTO.WorkItems.Count(_ => !_.IsSyncToCalendar) > 0)
+                    {
+                        <div class="d-inline-block" style="margin-left:10px">
+                            <span style="@SyncToCalendarStyle"><u style="cursor:pointer" @onclick="SyncToCalendar">⇅ @localizer["Sync Task To Calendar"]</u></span>
+                            <div style="@SyncCalendarLoaderStyle"><div class="loader d-inline-block"></div> @localizer["Executing..."]</div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-sm-4 col-md-3">
+                    <div class="left-panel">
+                        <div class="info-panel">
+                            <div class="personal-sec">
+                                <div class="name">
+                                    <h3 class="margin0">@UserDTO.FullName</h3>
+                                    <h5 class="margint5">@UserDTO.UserName</h5>
+                                </div>
+                                <div class="contact-info">
+                                    <div><i class="fa fa-envelope"></i> <span>@UserDTO.Email</span></div>
+                                    <div><i class="fa fa-certificate"></i> <span>@localizer[UserDTO.Role.Value]</span></div>
+                                </div>
+                            </div>
+                            <div class="personal-sec sec-footer clearfix">
+                                <ul class="lead-score">
+                                    <li>
+                                        <div class="score">@UserDTO.Projects.Count()</div>
+                                        <div class="score-label">@localizer["Projects"]</div>
+                                    </li>
+                                    <li>
+                                        <div class="score">
+                                            <a class="pe-auto text-white" href="/tasks?assigneeid=@(UserDTO.Id)">
+                                                @UserDTO.WorkItems.Count()
+                                            </a>
+                                        </div>
+                                        <div class="score-label">@localizer["Tasks"]</div>
+                                    </li>
+                                    <li>
+                                        <div class="score">
+                                            @(UserDTO.ActiveStatus ? @localizer["Active"] : @localizer["Deactive"])
+                                        </div>
+                                        <div class="score-label">@localizer["Status"]</div>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="menu-panel margint20 marginb15">
+                            <ul class="menu">
+                                <li class="active"><a data-toggle="tab" href="#description">@localizer["Description"]</a></li>
+                                <li><a data-toggle="tab" class="" href="#members">@localizer["Projects"]</a></li>
+                                <li><a data-toggle="tab" class="" href="#openningMainWorkItems">@localizer["Openning Tasks"]</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-8 col-md-9">
+                    <div class="right-panel">
+                        <div class="tab-content">
+                            <div id="description" class="tab-pane fade in active">
+                                <div class="form-group row">
+                                    <label class="control-label col-md-3 col-xs-6 fw-bold">@localizer["Full Name"] </label>
+                                    <div class="col-md-9 col-xs-6">@UserDTO.FullName</div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="control-label col-md-3 col-xs-6 fw-bold">@localizer["Username"] </label>
+                                    <div class="col-md-9 col-xs-6">@UserDTO.UserName</div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="control-label col-md-3 col-xs-6 fw-bold">@localizer["AccountType"] </label>
+                                    <div class="col-md-9 col-xs-6">
+                                        <Badge Color="BadgeColor.Primary" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[UserDTO.AccountType.ToString()]</Badge>
+                                    </div>
+                                </div>
+                                @if (UserDTO.AccountType == AccountType.Internal)
+                                {
+                                    <div class="form-group row">
+                                        <label class="control-label col-md-3 col-xs-6 fw-bold">@localizer["ExternalAccountConnected"] </label>
+                                        <div class="col-md-9 col-xs-6">
+                                            @(UserDTO.ExternalAccountConnected ? localizer["Connected"] : localizer["NotConnected"])
+                                        </div>
+                                    </div>
+                                }
+                                <div class="form-group row">
+                                    <label class="control-label col-md-3 col-xs-6 fw-bold">Email </label>
+                                    <div class="col-md-9 col-xs-6 @(UserDTO.IsEmailConfirmed ? "text-success": "text-danger")">
+                                        @UserDTO.Email
+                                        @if (UserDTO.IsEmailConfirmed)
+                                        {
+                                            <Tooltip Title="@localizer["Verified"]" role="button">
+                                                <Icon Name="IconName.Check" Color="IconColor.Success"></Icon>
+                                            </Tooltip>
+                                        }
+                                        else
+                                        {
+                                            <Tooltip Title="@localizer["Not Verified"]" role="button">
+                                                <Icon Name="IconName.X" Color="IconColor.Danger"></Icon>
+                                            </Tooltip>
+                                            <div class="text-primary d-inline-block">
+                                                <span style="@DirectSendEmailUrlStyle"><u style="cursor:pointer" @onclick="DirectSendEmailUrl">➣ @localizer["Verify"]</u></span>
+                                                <div style="@ConfirmEmailLoaderStyle"><div class="loader d-inline-block"></div> @localizer["Sending..."]</div>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group row">
+                                    <label class="control-label col-md-3 col-xs-6 fw-bold">@localizer["Phone Number"] </label>
+                                    <div class="col-md-9 col-xs-6 @(UserDTO.IsPhoneConfirmed ? "text-success": "text-danger")">
+                                        @UserDTO.Phone
+                                        @if (!string.IsNullOrEmpty(UserDTO.Phone))
+                                        {
+                                            if (UserDTO.IsPhoneConfirmed)
+                                            {
+                                                <Tooltip Title="@localizer["Verified"]" role="button">
+                                                    <Icon Name="IconName.Check" Color="IconColor.Success"></Icon>
+                                                </Tooltip>
+                                            }
+                                            else
+                                            {
+                                                <Tooltip Title="@localizer["Not Verified"]" role="button">
+                                                    <Icon Name="IconName.X" Color="IconColor.Danger"></Icon>
+                                                </Tooltip>
+                                                <div class="text-primary d-inline-block">
+                                                    <span style="@DirectSendOtpStyle"><u style="cursor:pointer" @onclick="DirectSendPhoneCode">➣ @localizer["Verify"]</u></span>
+                                                    <div style="@ConfirmPhoneLoaderStyle"><div class="loader d-inline-block"></div> @localizer["Sending..."]</div>
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="control-label col-md-3 col-xs-6 fw-bold">@localizer["Role"] </label>
+                                    <div class="col-md-9 col-xs-6">
+                                        @if (UserDTO.Role.Value.Equals(UserRoleConstants.Member))
+                                        {
+                                            <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[UserDTO.Role.Value]</Badge>
+                                        }
+                                        else if (UserDTO.Role.Value.Equals(UserRoleConstants.CEO))
+                                        {
+                                            <Badge Color="BadgeColor.Warning" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[UserDTO.Role.Value]</Badge>
+                                        }
+                                        else
+                                        {
+                                            <Badge Color="BadgeColor.Info" IndicatorType="BadgeIndicatorType.RoundedPill">@localizer[UserDTO.Role.Value]</Badge>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="control-label col-md-3 col-xs-6 fw-bold">@localizer["Tasks"] </label>
+                                    <div class="col-md-9 col-xs-6">@UserDTO.WorkItems.Count()</div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="control-label col-md-3 col-xs-6 fw-bold">@localizer["Project"] </label>
+                                    <div class="col-md-9 col-xs-6">@UserDTO.Projects.Count()</div>
+                                </div>
+                            </div>
+                            <div id="members" class="tab-pane fade">
+                                <div class="form-group row">
+                                    <div class="container-fluid">
+                                    <div class="row">
+                                        <Grid TItem="BoardDTO"
+                                        AllowSorting="false"
+                                        Class="table table-hover table-bordered table-striped"
+                                        Data="@UserDTO.Projects"
+                                        RowClass="GetRowClass"
+                                        AllowPaging="true"
+                                        PageSize="5"
+                                        PageSizeSelectorVisible="true"
+                                        PageSizeSelectorItems="@(new int[] { 5,10,15 })"
+                                        PaginationItemsTextFormat="@localizer["PaginationItemsTextFormat"]"
+                                        ItemsPerPageText="@localizer["ItemsPerPageText"]"
+                                        Responsive="true">
+                                        <GridColumns>
+                                                    <GridColumn TItem="BoardDTO" HeaderText="@localizer["Title"]" SortKeySelector="item => item.Name">
+                                            <p>
+                                                <a class="pe-auto" href="/project?id=@(context.Id)">
+                                                    @context.Name
+                                                </a>
+                                            </p>
+                                        </GridColumn>
+
+                                        <GridColumn TItem="BoardDTO" HeaderText="@localizer["Start Date"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End"
+                                                                SortKeySelector="item => item.StartDate" >
+                                            @context.StartDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)
+                                        </GridColumn>
+
+                                        <GridColumn TItem="BoardDTO" HeaderText="@localizer["End Date"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End"
+                                                                SortKeySelector="item => item.EndDate" >
+                                            @context.EndDate.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)
+                                        </GridColumn>
+
+                                        <GridColumn TItem="BoardDTO" HeaderText="@localizer["Status"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+                                                                SortKeySelector="item => item.Status" >
+                                            @if (context.Status == BoardStatus.Inprogress)
+                                            {
+                                                <Badge Color="BadgeColor.Warning"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                    @localizer[context.Status.ToString()]
+                                                </Badge>
+                                            }
+                                            else if (context.Status == BoardStatus.NotStarted)
+                                            {
+                                                <Badge Color="BadgeColor.Secondary"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Status.ToString()]
+                                                </Badge>
+                                            }
+                                            else
+                                            {
+                                                <Badge Color="BadgeColor.Success"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Status.ToString()]
+                                                </Badge>
+                                            }
+                                        </GridColumn>
+
+                                        <GridColumn TItem="BoardDTO" HeaderText="@localizer["Members"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End"
+                                                                SortKeySelector="item => item.Members.Count()" >
+                                            @context.Members.Count()
+                                        </GridColumn>
+
+                                        <GridColumn TItem="BoardDTO" HeaderText="@localizer["Tasks"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End"
+                                                                SortKeySelector="item => item.WorkItems.Count()" >
+                                            @context.WorkItems.Count()
+                                        </GridColumn>
+                                        <GridColumn TItem="BoardDTO" HeaderText="@localizer["Action"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+                                                        @if (AuthService.User.Role.Value == UserRoleConstants.CEO ||
+                                                        (AuthService.User.Role.Value == UserRoleConstants.ProjectManager && UserDTO.Id == context.Owner.Id))
+                                                        {
+                                                            <Button Color="ButtonColor.Primary" Outline="true" Size="Size.ExtraSmall" @onclick="()=>NavToBoard(context.Id, true)">
+                                                                <Tooltip Title="@localizer["Edit Project"]" role="button">
+                                                                    <Icon Name="IconName.Pencil"></Icon>
+                                                                </Tooltip>
+                                                            </Button>
+                                                        }
+                                        </GridColumn>
+                                        </GridColumns>
+                                    </Grid> 
+                                    </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="openningMainWorkItems" class="tab-pane fade">
+                                <div class="form-group row">
+                                    <div class="container-fluid">
+                                    <div class="row">
+                                        <Grid TItem="WorkItemDTO"
+                                        AllowSorting="false"
+                                        Class="table table-hover table-bordered table-striped"
+                                        Data="@UserDTO.WorkItems.Where(_ => _.Status != WorkItemStatus.Done)"
+                                        AllowPaging="true"
+                                        PageSize="5"
+                                        PageSizeSelectorVisible="true"
+                                        PageSizeSelectorItems="@(new int[] { 5,10,15 })"
+                                        PaginationItemsTextFormat="@localizer["PaginationItemsTextFormat"]"
+                                        ItemsPerPageText="@localizer["ItemsPerPageText"]"
+                                        Responsive="true"
+                                        RowClass="GetRowClass">
+                                        <GridColumns>
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Code"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center" SortKeySelector="item => item.Code">
+                                                @context.Code
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Project"]" SortKeySelector="item => item.Board.Name">
+                                                <p>
+                                                    <a class="pe-auto" href="/project?id=@(context.Board.Id)">
+                                                        @context.Board.Name
+                                                    </a>
+                                                </p>
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Title"]" SortKeySelector="item => item.Title">
+                                                    <p><a class="pe-auto" href="/task/@(context.Id)">
+                                                        @context.Title
+                                                    </a></p>
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Type"]" SortKeySelector="item => item.Type">
+                                                        @localizer[context.Type.ToString()]
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Start At"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End" SortKeySelector="item => item.StartDate">
+                                                @(context.StartDate is not null ? context.StartDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "")
+                                            </GridColumn>
+
+                                                    <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["End At"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End" SortKeySelector="item => item.EndDate">
+                                                @(context.EndDate is not null ? context.EndDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "")
+                                            </GridColumn>
+
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Status"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center" SortKeySelector="item => item.Status">
+                                                @if (context.Status == WorkItemStatus.Done)
+                                                {
+                                                    <Badge Color="BadgeColor.Success"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Status.ToString()]
+                                                    </Badge>
+                                                }
+                                                else if (context.Status == WorkItemStatus.Todo)
+                                                {
+                                                    <Badge Color="BadgeColor.Secondary"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Status.ToString()]
+                                                    </Badge>
+                                                }
+                                                else
+                                                {
+                                                    <Badge Color="BadgeColor.Warning"  IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Status.ToString()]
+                                                    </Badge>
+                                                }
+                                            </GridColumn>
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["SyncCalendar"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+                                                        SortKeySelector="item => item.IsSyncToCalendar">
+                                                @if (!context.IsSyncToCalendar)
+                                                {
+                                                    <Badge Color="BadgeColor.Secondary" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                        @localizer["NotSync"]
+                                                    </Badge>
+                                                }
+                                                else
+                                                {
+                                                    <Badge Color="BadgeColor.Success" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                        @localizer["Synced"]
+                                                    </Badge>
+                                                }
+                                            </GridColumn>
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Priority"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center" SortKeySelector="item => item.Priority">
+                                                @if (context.Priority == WorkItemPriority.DoItNow)
+                                                {
+                                                    <Badge Color="BadgeColor.Danger" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Priority.ToString()]
+                                                    </Badge>
+                                                }
+                                                else if (context.Priority == WorkItemPriority.Wont)
+                                                {
+                                                    <Badge Color="BadgeColor.Secondary" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Priority.ToString()]
+                                                    </Badge>
+                                                }
+                                                else
+                                                {
+                                                    <Badge Color="BadgeColor.Warning" IndicatorType="BadgeIndicatorType.RoundedPill">
+                                                                @localizer[context.Priority.ToString()]
+                                                    </Badge>
+                                                }
+                                            </GridColumn>
+                                            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Action"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+                                                <Button Color="ButtonColor.Primary" Outline="true" Size="Size.ExtraSmall" @onclick="()=>NavToUpdateTask(context.Id)">
+                                                    <Tooltip Title="@localizer["Edit Task"]" role="button">
+                                                        <Icon Name="IconName.Pencil"></Icon>
+                                                    </Tooltip>
+                                                </Button>
+                                            </GridColumn>
+                                        </GridColumns>
+                                    </Grid> 
+                                    </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+<Modal @ref="UpdateProfileModal" 
+       OnShown="OnShowUpdateProfileModal" OnHidden="()=>OnHiddenModal(UpdateProfileModal)" IsVerticallyCentered="true">
+    <HeaderTemplate>🖌 @localizer["Change Profile"]</HeaderTemplate>
+       <BodyTemplate>
+        <EditForm Model="UpdateUserDTO" Enhance OnValidSubmit="SaveProfile">
+            <DataAnnotationsValidator />
+            @* <div class="form-group mb-3">
+                <input step="any"
+                       @bind-value:event="onchange"
+                       @oninput="FullNameChanged"
+                       @bind-value="UpdateUserDTO.FullName"
+                       class="form-control"
+                       placeholder="Fullname" />
+            </div> *@
+            <div class="form-group mb-3">
+                <FloatingText @bind-Value="UpdateUserDTO.FullName"
+                              class="form-control"
+                              Type="text"
+                              Placeholder="@localizer["Full Name"]"
+                              Label="@localizer["Full Name"]" />
+                <ValidationMessage For="()=>UpdateUserDTO.FullName" />
+            </div>
+            <div class="form-group mb-3">
+                <FloatingText @bind-Value="UpdateUserDTO.UserName"
+                              class="form-control"
+                              Type="text"
+                              Placeholder="@localizer["Username"]"
+                              Label="@localizer["Username"]" />
+                <ValidationMessage For="()=>UpdateUserDTO.UserName" />
+            </div>
+            <div class="form-group mb-3">
+                <FloatingText @bind-Value="UpdateUserDTO.Phone"
+                              class="form-control"
+                              Type="text"
+                              Placeholder="@localizer["Phone Number"]"
+                              Label="@localizer["Phone Number"]" />
+                <ValidationMessage For="()=>UpdateUserDTO.Phone" />
+                @* <input type="text"
+                       class="form-control mb-3"
+                       placeholder="Phone Number"
+                       step="any"
+                       @bind-value:event="onchange"
+                       @oninput="PhoneChanged"
+                       @bind-value="UpdateUserDTO.Phone"
+                       readonly="@IsReadOnlyPhone">
+                </input>
+                <label class="fs-6 text-success" style="@PhoneVerifiedLabelStyle">Phone Number Verified!</label>
+                <label class="fs-6 text-danger" style="@PhoneInvalidLabelStyle">Phone Number Verified Failed!</label>
+                <label class="fs-6 text-danger" style="@WrongFormatPhoneLabelStyle">Wrong Format Phone Number!</label> *@
+                
+                @* <div>
+                    <Button @ref="SendPhoneCodeBtn" Style="@SendPhoneCodeBtnStyle" Class="mb-3" Color="ButtonColor.Primary"
+                    @onclick="SendPhoneCode">➣ Send code</Button>
+                    <input type="text"
+                       step="any"
+                       @bind-value:event="onchange"
+                       @oninput="OtpChanged"
+                       @bind-value="PhoneVerifyCode"
+                       class="form-control mb-3"
+                       style="@PhoneVerifyInputStyle"
+                       placeholder="Your Otp" />
+                </div> *@
+                @* <Button @ref="VerifyPhoneBtn" Style="@PhoneVerifyBtnStyle" Class="mb-3" Color="ButtonColor.Primary" @onclick="VerifyPhone">✓ Verify</Button> *@
+            </div>
+            @if (AuthService.User.Role.Value.Equals(UserRoleConstants.CEO))
+            {
+                <div class="mb-3">
+                    <div class="input-wrap">
+                        <label>@localizer["Role"]</label>
+                        <select style="width: 100%;" @bind="UpdateUserDTO.Role.Value">
+                            <option value="" hidden>@localizer["Choose Role"]</option>
+                            @foreach (var role in Roles)
+                            {
+                                <option value=@role.Value>
+                                    @localizer[role.DisplayName]
+                                </option>
+                            }
+                        </select>
+                    </div>
+                    <ValidationMessage For="()=>UpdateUserDTO.Role" />
+                </div>
+            }
+            <div class="form-group">
+                <div class="d-grid gap-2 mb-3">
+                    @* <Button Style="@SaveProfileBtnStyle"
+                        Disabled = "@IsSaveProfileBtnDisable"
+                        Class="btn btn-success"
+                        Type="ButtonType.Submit">
+                        <Icon Name="IconName.PersonCheckFill" /> Save Changes
+                    </Button> *@
+                    <Button @ref="SaveProfileBtn" Class="btn btn-success"
+                            Type="ButtonType.Submit">
+                        <Icon Name="IconName.PersonCheckFill" /> @localizer["Save Changes"]
+                    </Button>
+                </div>
+            </div>
+        </EditForm>
+    </BodyTemplate>
+</Modal>
+
+<Modal @ref="UpdatePasswordModal" IsVerticallyCentered="true" OnHidden="()=>OnHiddenModal(UpdatePasswordModal)">
+    <HeaderTemplate>🖌 @localizer["Change Password"]</HeaderTemplate>
+    <BodyTemplate>
+        <EditForm EditContext="EditContext" Enhance OnValidSubmit="SavePassword">
+            <DataAnnotationsValidator />
+                <div class="form-group mb-3">
+                    <FloatingText class="form-control"
+                                  Type="@(ShowPassword is true? "text":"password")"
+                                  @bind-Value="PasswordDTO.CurrentPassword"
+                                  Placeholder="@localizer["Current Password"]"
+                                  Label="@localizer["Current Password"]">
+                    </FloatingText>
+                    <ValidationMessage For="()=>PasswordDTO.CurrentPassword" />
+                </div>
+
+                <div class="form-group mb-3">
+                    <FloatingText class="form-control"
+                              Type="@(ShowPassword is true? "text":"password")"
+                                  @bind-Value="PasswordDTO.NewPassword"
+                                  Placeholder="@localizer["New Password"]"
+                                  Label="@localizer["New Password"]">
+                    </FloatingText>
+                    <ValidationMessage For="()=>PasswordDTO.NewPassword" />
+                </div>
+                <div class="form-group mb-3">
+                    <FloatingText class="form-control"
+                              Type="@(ShowPassword is true? "text":"password")"
+                                  @bind-Value="PasswordDTO.ConfirmPassword"
+                                  Placeholder="@localizer["Confirm Password"]"
+                                  Label="@localizer["Confirm Password"]">
+                    </FloatingText>
+                    <ValidationMessage For="()=>PasswordDTO.ConfirmPassword" />
+                </div>
+                @* <div class="mb-3">
+                    <input class="form-check-input"
+                           style="height:17px; width:17px"
+                           type="checkbox"
+                           checked=@ShowPassword
+                           @onchange="eventArgs => { ShowPasswordCheckboxClicked(eventArgs.Value!); }">
+                    <label class="ms-1 fw-bold" style="margin-top: 1px">@localizer["Show Password"]</label>
+                </div> *@
+                <div class="form-group">
+                    <div class="d-grid gap-2 mb-3">
+                        <Button Class="btn btn-success"
+                                Type="ButtonType.Submit">
+                            <Icon Name="IconName.PersonCheckFill" /> @localizer["Save Changes"]
+                        </Button>
+                    </div>
+                </div>
+        </EditForm>
+    </BodyTemplate>
+</Modal>
+<Modal @ref="DirectVerifyPhoneModal" OnHidden="()=>OnHiddenModal(DirectVerifyPhoneModal)">
+    <HeaderTemplate>✔ @localizer["Verify Phone Number"]</HeaderTemplate>
+    <BodyTemplate>
+        <div>
+            <input type="text"
+                   @bind="PhoneVerifyCode"
+                   class="form-control mb-3"
+                   placeholder="@localizer["Your Otp"]" />
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button @ref="DirectVerifyPhoneBtn" Disabled="@IsDisableDirectVerifyPhoneBtn" Color="ButtonColor.Primary" @onclick="DirectVerifyPhone">✔ @localizer["Verify"]</Button>
+    </FooterTemplate>
+</Modal>
+<Modal @ref="ResponseModal" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer[ResponseMessage]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="()=>HideModall(ResponseModal)">✖ @localizer["Close"]</Button>
+    </FooterTemplate>
+</Modal>
+@code {
+    /// <summary>
+    /// PreloadService
+    /// </summary>
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    /// <summary>
+    /// Id
+    /// </summary>
+    public string Id =string.Empty;
+
+    /// <summary>
+    /// EditMode
+    /// </summary>
+    public bool EditMode;
+
+    /// <summary>
+    /// UpdateAccountModal
+    /// </summary>
+    private Modal UpdateProfileModal = default!;
+
+    /// <summary>
+    /// UpdatePasswordModal
+    /// </summary>
+    private Modal UpdatePasswordModal = default!;
+
+    /// <summary>
+    /// DirectVerifyPhoneModal
+    /// </summary>
+    private Modal DirectVerifyPhoneModal = default!;
+
+    /// <summary>
+    /// ResponseModal
+    /// </summary>
+    private Modal ResponseModal = default!;
+
+    /// <summary>
+    /// User
+    /// </summary>
+    private UserDTO UserDTO = new();
+
+    /// <summary>
+    /// UpdateUserDTO
+    /// </summary>
+    private UpdateUserDTO UpdateUserDTO = new();
+
+    /// <summary>
+    /// PasswordDTO
+    /// </summary>
+    private PasswordDTO PasswordDTO = new();
+
+    /// <summary>
+    /// EditContext
+    /// </summary>
+    private EditContext EditContext = new(new PasswordDTO());
+
+    /// <summary>
+    /// SendPhoneCodeBtnStyle
+    /// </summary>
+    //private string SendPhoneCodeBtnStyle = "display:none";
+
+    /// <summary>
+    /// PhoneVerifyBtnStyle
+    /// </summary>
+    //private string PhoneVerifyBtnStyle = "display:none";
+
+    /// <summary>
+    /// PhoneVerifyInputStyle
+    /// </summary>
+    //private string PhoneVerifyInputStyle = "display:none";
+
+    /// <summary>
+    /// SaveProfileBtnStyle
+    /// </summary>
+    //private string SaveProfileBtnStyle = "display:block";
+
+    /// <summary>
+    /// IsSaveProfileBtnDisable
+    /// </summary>
+    //private bool IsSaveProfileBtnDisable = true;
+
+    /// <summary>
+    /// PhoneVerifiedLabelStyle
+    /// </summary>
+    //private string PhoneVerifiedLabelStyle = "display:none";
+
+    /// <summary>
+    /// PhoneInvalidLabelStyle
+    /// </summary>
+    //private string PhoneInvalidLabelStyle = "display:none";
+
+    /// <summary>
+    /// WrongFormatPhoneLabelStyle
+    /// </summary>
+    //private string WrongFormatPhoneLabelStyle = "display:none";
+
+    /// <summary>
+    /// DirectSendEmailUrlStyle
+    /// </summary>
+    private string DirectSendEmailUrlStyle = string.Empty;
+
+    /// <summary>
+    /// ConfirmEmailLoaderStyle
+    /// </summary>
+    private string ConfirmEmailLoaderStyle = "display:none";
+
+    /// <summary>
+    /// ConfirmPhoneLoaderStyle
+    /// </summary>
+    private string ConfirmPhoneLoaderStyle = "display:none";
+
+    /// <summary>
+    /// SyncToCalendarStyle
+    /// </summary>
+    private string SyncToCalendarStyle = string.Empty;
+
+    /// <summary>
+    /// SyncCalendarLoaderStyle
+    /// </summary>
+    private string SyncCalendarLoaderStyle = "display:none";
+
+    /// <summary>
+    /// DirectSendOtpStyle
+    /// </summary>
+    private string DirectSendOtpStyle = string.Empty;
+
+    /// <summary>
+    /// IsReadOnlyPhone
+    /// </summary>
+    //private bool IsReadOnlyPhone;
+
+    /// <summary>
+    /// PhoneVerifyCode
+    /// </summary>
+    private string PhoneVerifyCode = string.Empty;
+
+    /// <summary>
+    /// VerifyPhoneBtn
+    /// </summary>
+    //private Button VerifyPhoneBtn = default!;
+
+    /// <summary>
+    /// DirectVerifyPhoneBtn
+    /// </summary>
+    private Button DirectVerifyPhoneBtn = default!;
+
+    /// <summary>
+    /// SaveProfileBtn
+    /// </summary>
+    private Button SaveProfileBtn = default!;
+
+    /// <summary>
+    /// IsDisableDirectVerifyPhoneBtn
+    /// </summary>
+    private bool IsDisableDirectVerifyPhoneBtn = true;
+
+    /// <summary>
+    /// SendPhoneCodeBtn
+    /// </summary>
+    //private Button SendPhoneCodeBtn = default!;
+
+    /// <summary>
+    /// ShowPassword
+    /// </summary>
+    private bool ShowPassword;
+
+    /// <summary>
+    /// ResponseMessage
+    /// </summary>
+    private string ResponseMessage = string.Empty;
+
+    /// <summary>
+    /// Roles
+    /// </summary>
+    private List<RoleDTO> Roles = new List<RoleDTO>();
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+        ShowSpinner();
+        GetQueryString();
+        await GetRolesAsync();
+        await GetAccountAsync();
+        HideSpinner();
+    }
+
+    /// <summary>
+    /// SetUpEditContext
+    /// </summary>
+    private void SetUpEditContext()
+    {
+        EditContext = new EditContext(PasswordDTO);
+        EditContext.OnFieldChanged += HandleFieldChanged!;
+    }
+
+    /// <summary>
+    /// HandleFieldChanged
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void HandleFieldChanged(object sender, FieldChangedEventArgs e)
+    {
+        EditContext.Validate();
+    }
+
+    /// <summary>
+    /// GetQueryString
+    /// </summary>
+    private void GetQueryString()
+    {
+        NavManager.TryGetQueryString<string>(nameof(Id), out Id);
+        NavManager.TryGetQueryString<bool>(nameof(EditMode), out EditMode);
+    }
+
+    /// <summary>
+    /// OnAfterRenderAsync
+    /// </summary>
+    /// <param name="firstRender"></param>
+    /// <returns></returns>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (EditMode)
+        {
+            await ShowModal(UpdateProfileModal);
+        }
+    }
+
+    /// <summary>
+    /// GetRolesAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetRolesAsync()
+    {
+        Roles = (await UserService.GetRolesAsync().ConfigureAwait(false)).RoleDTOs;
+    }
+
+    /// <summary>
+    /// GetAccountAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetAccountAsync()
+    {
+        UserDTO = (await UserService.GetByIdAsync(Id).ConfigureAwait(false)).User!;
+    }
+
+    /// <summary>
+    /// SendPhoneCode
+    /// </summary>
+    /// <returns></returns>
+    // private async Task SendPhoneCode()
+    // {
+    //     SendPhoneCodeBtn.ShowLoading("Sending code to phone number...");
+
+    //     var response =  await UserService.SendPhoneValidateTokenAsync(new PhoneNumberDTO()
+    //         {
+    //             PhoneNumber = UpdateUserDTO.Phone!,
+    //             UserId = UserDTO.Id
+    //         }).ConfigureAwait(false);
+    //     SendPhoneCodeBtn.HideLoading();
+
+    //     if (response is not null && response.Flag)
+    //     {
+    //         IsReadOnlyPhone = true;
+    //     }
+    //     PhoneVerifyInputStyle = "display:block";
+    // }
+
+    /// <summary>
+    /// PhoneChanged
+    /// </summary>
+    // private void PhoneChanged(ChangeEventArgs args)
+    // {
+    //     if (args.Value?.ToString() != UserDTO.Phone)
+    //     {
+    //         IsSaveProfileBtnDisable = false;
+    //     }
+    //     else
+    //     {
+    //         IsSaveProfileBtnDisable = true;
+    //     }
+    //     if (CurrentUser.Role.Value != UserRoleConstants.CEO)
+    //     {
+    //         UpdateSaveProfileBtn(args.Value);
+    //         UpdateSendPhoneCodeBtn(args.Value);
+    //     }
+    // }
+
+    /// <summary>
+    /// FullNameChanged
+    /// </summary>
+    // private void FullNameChanged(ChangeEventArgs args)
+    // {
+    //     if (args.Value is not null && args.Value!.ToString() != UserDTO.FullName)
+    //     {
+    //         IsSaveProfileBtnDisable = false;
+    //     }
+    //     else
+    //     {
+    //         IsSaveProfileBtnDisable = true;
+    //     }
+    // }
+
+
+    /// <summary>
+    /// UpdateSaveProfileBtn
+    /// </summary>
+    /// <param name="value"></param>
+    // private void UpdateSaveProfileBtn(object? value)
+    // {
+    //     if (value!.ToString() == UserDTO.Phone || value is null || string.IsNullOrEmpty(value!.ToString()))
+    //     {
+    //         SaveProfileBtnStyle = "display:block";
+    //         WrongFormatPhoneLabelStyle = "display:none";
+    //     }
+    //     else
+    //     {
+    //         SaveProfileBtnStyle = "display:none";
+    //         WrongFormatPhoneLabelStyle = "display:block";
+    //     }
+    // }
+
+    /// <summary>
+    /// UpdateSendPhoneCodeBtn
+    /// </summary>
+    /// <param name="value"></param>
+    // private void UpdateSendPhoneCodeBtn(object? value)
+    // {
+    //     if (value is not null && !string.IsNullOrEmpty(value!.ToString()) &&
+    //         Helper.IsInputMatchRegex(value!.ToString()!, RegExConstants.PhoneRegEx) && value!.ToString() != UserDTO.Phone)
+    //     {
+    //         SendPhoneCodeBtnStyle = "display:block";
+    //         WrongFormatPhoneLabelStyle = "display:none";
+    //     }
+    //     else if (value is null || string.IsNullOrEmpty(value!.ToString()))
+    //     {
+    //         WrongFormatPhoneLabelStyle = "display:none";
+    //         SendPhoneCodeBtnStyle = "display:none";
+    //     }
+    //     else
+    //     {
+    //         SendPhoneCodeBtnStyle = "display:none";
+    //     }
+    // }
+
+    /// <summary>
+    /// OtpChanged
+    /// </summary>
+    /// <param name="args"></param>
+    // private void OtpChanged(ChangeEventArgs args)
+    // {
+    //     if (args.Value is not null && !string.IsNullOrEmpty(args.Value!.ToString()))
+    //     {
+    //         PhoneVerifyBtnStyle = "display:block";
+    //     }
+    //     else
+    //     {
+    //         PhoneVerifyBtnStyle = "display:none";
+    //     }
+    // }
+
+    /// <summary>
+    /// VerifyPhone
+    /// </summary>
+    /// <returns></returns>
+    // private async Task VerifyPhone()
+    // {
+    //     VerifyPhoneBtn.ShowLoading("Verifyng...");
+
+    //     var response =  await UserService.ValidatePhoneNumberAsync(new PhoneNumberDTO
+    //     {
+    //         UserId = UserDTO.Id,
+    //         PhoneNumber = UpdateUserDTO.Phone!,
+    //         Token = PhoneVerifyCode.Trim()
+    //     }).ConfigureAwait(false);
+    //     VerifyPhoneBtn.HideLoading();
+
+    //     if (response is not null && response.Flag)
+    //     {
+    //         UpdateUserDTO.IsPhoneConfirmed = true;
+    //         PhoneVerifiedLabelStyle = "display:block";
+    //         PhoneInvalidLabelStyle = "display:none";
+    //         SaveProfileBtnStyle = "display:block";
+    //     }
+    //     else
+    //     {
+    //         PhoneInvalidLabelStyle = "display:block";
+    //         PhoneVerifiedLabelStyle = "display:none";
+    //     }
+    //     IsReadOnlyPhone = false;
+    //     SendPhoneCodeBtnStyle = "display:none";
+    //     PhoneVerifyInputStyle = "display:none";
+    //     PhoneVerifyBtnStyle = "display:none";
+    //     PhoneVerifyCode = string.Empty;
+    // }
+
+    /// <summary>
+    /// DirectVerifyPhone
+    /// </summary>
+    /// <returns></returns>
+    private async Task DirectVerifyPhone()
+    {
+        DirectVerifyPhoneBtn.ShowLoading(localizer["Verifyng..."]);
+        var response = await UserService.ValidatePhoneNumberAsync(new PhoneNumberDTO
+            {
+                UserId = UserDTO.Id,
+                PhoneNumber = UserDTO.Phone!,
+                Token = PhoneVerifyCode.Trim()
+            }).ConfigureAwait(false);
+        DirectVerifyPhoneBtn.HideLoading();
+        await HideModall(DirectVerifyPhoneModal);
+        if (response is not null && response.Flag)
+        {
+            var updateResponse = await UserService.UpdateAsync(new UpdateUserDTO
+                {
+                    Id = UserDTO.Id,
+                    FullName = UserDTO.FullName,
+                    Phone = UserDTO.Phone,
+                    IsPhoneConfirmed = true,
+                    Role = UserDTO.Role
+                });
+            ResponseMessage = updateResponse.Message!;
+            if (updateResponse.Flag)
+            {
+                UserDTO.IsPhoneConfirmed = true;
+            }
+        }
+        else
+        {
+            ResponseMessage = localizer["Invalid Otp!"];
+        }
+        await ShowModal(ResponseModal);
+        PhoneVerifyCode = string.Empty;
+    }
+
+    /// <summary>
+    /// DirectSendPhoneCode
+    /// </summary>
+    /// <returns></returns>
+    private async Task DirectSendPhoneCode()
+    {
+        PhoneVerifyCode = string.Empty;
+        IsDisableDirectVerifyPhoneBtn = true;
+        DirectSendOtpStyle = "display:none";
+        ConfirmPhoneLoaderStyle = string.Empty;
+        var response = await UserService.SendPhoneValidateTokenAsync(new PhoneNumberDTO()
+            {
+                PhoneNumber = UserDTO.Phone!,
+                UserId = UserDTO.Id
+            }).ConfigureAwait(false);
+        IsDisableDirectVerifyPhoneBtn = false;
+        DirectSendOtpStyle = string.Empty;
+        ConfirmPhoneLoaderStyle = "display:none";
+        await ShowModal(DirectVerifyPhoneModal);
+    }
+
+    /// <summary>
+    /// DirectSendEmailUrl
+    /// </summary>
+    /// <returns></returns>
+    private async Task DirectSendEmailUrl()
+    {
+        DirectSendEmailUrlStyle = "display:none";
+        ConfirmEmailLoaderStyle = string.Empty;
+        var response = await UserService.SendEmailValidateTokenAsync(UserDTO.Id).ConfigureAwait(false);
+        if (response is not null && response.Flag)
+        {
+            ResponseMessage = localizer["We sent comfirm url to your email. Please go to your inbox."];
+        }
+        else
+        {
+            ResponseMessage = localizer["Some thing went wrong."];
+        }
+        await ShowModal(ResponseModal);
+        DirectSendEmailUrlStyle = string.Empty;
+        ConfirmEmailLoaderStyle = "display:none";
+    }
+
+    /// <summary>
+    /// OnShowUpdateProfileModal
+    /// </summary>
+    private void OnShowUpdateProfileModal()
+    {
+        //IsSaveProfileBtnDisable = true;
+        UpdateUserDTO = new()
+            {
+                Id = UserDTO.Id,
+                FullName = UserDTO.FullName,
+                UserName = UserDTO.UserName,
+                Phone = UserDTO.Phone,
+                IsPhoneConfirmed = UserDTO.IsPhoneConfirmed,
+                Role = UserDTO.Role
+            };
+    }
+
+    /// <summary>
+    /// ShowModal
+    /// </summary>
+    /// <param name="modal"></param>
+    /// <returns></returns>
+    private async Task ShowModal(Modal modal)
+    {
+        switch (modal)
+        {
+            case var value when value == UpdateProfileModal:
+                break;
+            case var value when value == UpdatePasswordModal:
+                SetUpEditContext(); break;
+            case var value when value == DirectVerifyPhoneModal:
+                break;
+        }
+        await modal.ShowAsync();
+    }
+
+    /// <summary>
+    /// HideModall
+    /// </summary>
+    /// <returns></returns>
+    private async Task HideModall(Modal modal)
+    {
+        await modal.HideAsync();
+    }
+
+    /// <summary>
+    /// OnHiddenModal
+    /// </summary>
+    /// <param name="modal"></param>
+    private void OnHiddenModal(Modal modal)
+    {
+        switch (modal)
+        {
+            case var value when value == UpdateProfileModal:
+                UpdateUserDTO = new(); break;
+            case var value when value == UpdatePasswordModal:
+                PasswordDTO = new(); break;
+            case var value when value == DirectVerifyPhoneModal:
+                PhoneVerifyCode = string.Empty; break;
+        }
+    }
+
+    /// <summary>
+    /// SaveProfile
+    /// </summary>
+    private async Task SaveProfile()
+    {
+        SaveProfileBtn.ShowLoading(localizer["Saving..."]);
+        //PhoneVerifiedLabelStyle = "display:none";
+        UpdateUserDTO.Id = UserDTO.Id;
+        UpdateUserDTO.IsPhoneConfirmed = false;
+        if (AuthService.User.Role.Value == UserRoleConstants.CEO && !string.IsNullOrEmpty(UpdateUserDTO.Phone) && !UpdateUserDTO.Phone.Equals(UserDTO.Phone))
+        {
+            UpdateUserDTO.IsPhoneConfirmed = true;
+        }
+        var response = await UserService.UpdateAsync(UpdateUserDTO);
+        if (response is not null)
+        {
+            ResponseMessage = response.Message!;
+            if (response.Flag)
+            {
+                UserDTO.FullName = UpdateUserDTO.FullName;
+                UserDTO.UserName = UpdateUserDTO.UserName;
+                UserDTO.Phone = UpdateUserDTO.Phone;
+                UserDTO.IsPhoneConfirmed = UpdateUserDTO.IsPhoneConfirmed;
+                UserDTO.Role = UpdateUserDTO.Role;
+            }
+        }
+        SaveProfileBtn.HideLoading();
+        await HideModall(UpdateProfileModal);
+        await ShowModal(ResponseModal);
+    }
+
+    /// <summary>
+    /// SavePassword
+    /// </summary>
+    private async Task SavePassword()
+    {
+        await HideModall(UpdatePasswordModal);
+        PasswordDTO.UserId = UserDTO.Id;
+        var response = await UserService.ChangePasswordAsync(PasswordDTO);
+        if (response is not null)
+        {
+            ResponseMessage = response.Message!;
+            await ShowModal(ResponseModal);
+        }
+    }
+
+    /// <summary>
+    /// SyncToCalendar
+    /// </summary>
+    /// <returns></returns>
+    private async Task SyncToCalendar()
+    {
+        bool isGraphTokenAlive = await microsoftCalendarService.CheckExternalAuthState();
+        if (!isGraphTokenAlive)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+        SyncToCalendarStyle = "display:none";
+        SyncCalendarLoaderStyle = string.Empty;
+
+        string? token = await AuthService.GetGraphToken();
+        await calendarService.SyncEvents(new SyncEventsDTO()
+        {
+            GraphToken = token!
+        });
+        SyncCalendarLoaderStyle = "display:none";
+        SyncToCalendarStyle = string.Empty;
+
+        UserDTO.WorkItems.Where(_ => !_.IsSyncToCalendar).ToList()
+            .ForEach(_ => _.IsSyncToCalendar = true);
+
+        ResponseMessage = $"{localizer["Tasks Synced Successfully."]}";
+        await ShowModal(ResponseModal);
+    }
+
+    /// <summary>
+    /// GetRowClass
+    /// </summary>
+    /// <param name="workItem"></param>
+    /// <returns></returns>
+    private string GetRowClass(WorkItemDTO workItem)
+    {
+        if (workItem.Status != WorkItemStatus.Done && workItem.Priority == WorkItemPriority.DoItNow)
+            return "align-middle table-danger";
+        return "align-middle table-warning";
+    }
+
+    /// <summary>
+    ///GetRowClass
+    /// </summary>
+    /// <param name="boardDTO"></param>
+    /// <returns></returns>
+    private string GetRowClass(BoardDTO boardDTO)
+    {
+        return "align-middle";
+    }
+
+    /// <summary>
+    /// NavToBoard
+    /// </summary>
+    /// <param name="guid"></param>
+    /// <param name="editMode"></param>
+    private void NavToBoard(Guid guid, bool editMode)
+    {
+        NavManager.NavigateTo($"/project?id={guid}&editmode={editMode}");
+    }
+
+    /// <summary>
+    /// NavToUpdateTask
+    /// </summary>
+    /// <param name="taskId"></param>
+    private void NavToUpdateTask(Guid taskId)
+    {
+        string url = $"/task/{taskId}?editmode=true";
+        NavManager.NavigateTo(url);
+    }
+
+    /// <summary>
+    /// ShowCurrentPasswordCheckboxClicked
+    /// </summary>
+    /// <param name="isCheck"></param>
+    private void ShowPasswordCheckboxClicked(object isCheck) => ShowPassword = !ShowPassword;
+
+    /// <summary>
+    /// ShowSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void ShowSpinner()
+    {
+        PreloadService.Show(SpinnerColor.Light);
+    }
+
+    /// <summary>
+    /// HideSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void HideSpinner()
+    {
+        PreloadService.Hide();
+    }
+}

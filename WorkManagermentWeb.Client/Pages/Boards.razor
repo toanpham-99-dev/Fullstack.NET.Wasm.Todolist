@@ -1,0 +1,393 @@
+﻿@page "/projects"
+@using System.Text.Json
+@*  *@
+@inject NavigationManager NavManager
+@inject IBoard BoardService
+@inject IUser UserService
+@inject IAuthService AuthService
+@inject IStringLocalizer<Resource> localizer
+@inject IJSRuntime js
+
+<Modal @ref="CreateBoardModal" Size="ModalSize.ExtraLarge" IsVerticallyCentered="true">
+    <HeaderTemplate>🖌 @localizer["Add Project"]</HeaderTemplate>
+    <BodyTemplate>
+        <EditForm Model="AddBoardDTO" OnValidSubmit="CreateBoardAsync" Enhance>
+            <DataAnnotationsValidator />
+            <div class="form-group mb-3">
+                <FloatingText @bind-Value="AddBoardDTO.Title"
+                              class="form-control"
+                              Type="text"
+                              Placeholder="@localizer["Title"]"
+                              Label="@localizer["Title"]" />
+                <ValidationMessage For="()=>AddBoardDTO.Title" />
+            </div>
+            <div class="row">
+                <div class="col">
+                    <div class="mb-3">
+                        <div class="input-wrap">
+                            <label>@localizer["Start Date - End Date"]</label>
+                            <div class="daterange">
+                                <DateRangePicker @bind-StartDate="AddBoardDTO.StartDate" @bind-EndDate="AddBoardDTO.EndDate" DateFormat="dd/MM/yyyy" />
+                            </div>
+                        </div>
+                        <ValidationMessage For="()=>AddBoardDTO.StartDate" />
+                        <ValidationMessage For="()=>AddBoardDTO.EndDate" />
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="mb-3">
+                        <div class="input-wrap">
+                            <label>@localizer["Assignee"]</label>
+                            <AutoComplete @bind-Value="AddBoardDTO!.AssigneeName"
+                                          TItem="UserDTO"
+                                          DataProvider="UsersDataProvider"
+                                          PropertyName="@nameof(UserDTO.Email)"
+                                          Placeholder="@localizer["Assignee"]"
+                                          OnChanged="(UserDTO SelectedUser) => OnAssigneeChanged(SelectedUser)" />
+                        </div>
+                        <ValidationMessage For="()=>AddBoardDTO.AssigneeName" />
+                    </div>
+                </div>
+            </div>
+            <div class="form-group mb-3">
+                <div class="input-wrap">
+                    <label>@localizer["Description"]</label>
+                    <div id="toolbar">
+                        <span class="ql-formats">
+                            <select class="ql-font">
+                                <option selected=""></option>
+                                <option value="serif"></option>
+                                <option value="monospace"></option>
+                            </select>
+                            <select class="ql-size">
+                                <option value="small"></option>
+                                <option selected=""></option>
+                                <option value="large"></option>
+                                <option value="huge"></option>
+                            </select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-bold"></button>
+                            <button class="ql-italic"></button>
+                            <button class="ql-underline"></button>
+                            <button class="ql-strike"></button>
+                        </span>
+                        <span class="ql-formats">
+                            <select class="ql-color"></select>
+                            <select class="ql-background"></select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-list" value="ordered"></button>
+                            <button class="ql-list" value="bullet"></button>
+                            <button class="ql-indent" value="-1"></button>
+                            <button class="ql-indent" value="+1"></button>
+                            <select class="ql-align">
+                                <option selected=""></option>
+                                <option value="center"></option>
+                                <option value="right"></option>
+                                <option value="justify"></option>
+                            </select>
+                        </span>
+                        <span class="ql-formats">
+                            <button class="ql-link"></button>
+                        </span>
+                    </div>
+                    <div @ref="@DivEditorElement" />
+                </div>
+            </div>
+            <div class="form-group">
+                <div class="d-grid gap-2 mb-3">
+                    <Button @ref="AddBoardBtn" Class="btn btn-primary float-end"
+                            Type="ButtonType.Submit">
+                        <Icon Name="IconName.BagPlusFill" /> @localizer["Save"]
+                    </Button>
+                </div>
+            </div>
+        </EditForm>
+    </BodyTemplate>
+</Modal>
+
+<Modal @ref="ResponseModal" OnHidden="OnResponseModalHidden" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer[Response.Message]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="OnHideResponseModalClick">✖ @localizer["Close"]</Button>
+    </FooterTemplate>
+</Modal>
+<div class="row" style="margin:5px">
+    <div class="col">
+        <h4>
+            <i class="fa  fa-briefcase"></i> &nbsp; @localizer["Projects"]
+        </h4>
+    </div>
+    <hr />
+</div>
+
+<div class="container-custom-card">
+    <div class="page-content-custom-card">
+        @if (AuthService.User.Role.Value != UserRoleConstants.Member)
+        {
+            <div class="card-custom-card" id="new-custom-card">
+                <div class="content-custom-card">
+                    <h2 class="title-custom-card">@localizer["New Project"]</h2>
+                    <p class="copy-custom-card">@localizer["Start your new plan or product development with new project"]</p>
+                    <button class="btn-custom-card" @onclick="OnShowCreateBoardModalClick">@localizer["Create now!"]</button>
+                </div>
+            </div>
+        }
+        @foreach (var board in BoardList)
+        {
+            <div class="card-custom-card">
+                <div class="content-custom-card">
+                    <h2 class="title-custom-card">@board.Name</h2>
+                    <button class="btn-custom-card" @onclick="()=>RedirectToDetail(board.Id)">@localizer["Detail"]</button>
+                    <button class="btn-custom-card" @onclick="()=>RedirectToWorkItems(board.Id)">@localizer["Tasks"]</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// MyApp
+    /// </summary>
+    [CascadingParameter] public App MyApp { get; set; } = new();
+
+    /// <summary>
+    /// PreloadService
+    /// </summary>
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    /// <summary>
+    /// User
+    /// </summary>
+    private ClaimsPrincipal? ClaimsPrincipal = default!;
+
+    /// <summary>
+    /// AddBoardBtn
+    /// </summary>
+    private Button AddBoardBtn = default!;
+
+    /// <summary>
+    /// CreateBoardModal
+    /// </summary>
+    private Modal CreateBoardModal = default!;
+
+    /// <summary>
+    /// ResponseModal
+    /// </summary>
+    private Modal ResponseModal = default!;
+
+    /// <summary>
+    /// Boards
+    /// </summary>
+    private List<BoardDTO> BoardList = new List<BoardDTO>();
+
+    /// <summary>
+    /// AddBoardDTO
+    /// </summary>
+    private PostPutBoardDTO AddBoardDTO = new();
+
+    /// <summary>
+    /// WorkSpaceId
+    /// </summary>
+    private Guid WorkSpaceId = new Guid("41ba2388-7981-41d7-b1ba-40fe6a76d0ff");
+
+    /// <summary>
+    /// Response
+    /// </summary>
+    private PostPutResponse Response = new(false, string.Empty, default!);
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        MyApp.SetLayout(typeof(MainLayout));
+        if (!AuthService.IsAuthenticated)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+        ShowSpinner();
+        await GetListBoardAsync();
+        HideSpinner();
+    }
+
+    /// <summary>
+    /// GetListBoardAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetListBoardAsync()
+    {
+        GetBoardsResponse response = await BoardService.GetListAsync(new GetBoardsDTO());
+        BoardList.AddRange(response.Boards);
+    }
+
+    /// <summary>
+    /// CreateBoardAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task CreateBoardAsync()
+    {
+        AddBoardBtn.ShowLoading(localizer["Loading..."]);
+        AddBoardDTO.WorkSpaceId = WorkSpaceId;
+        AddBoardDTO.Description = await GetEditorContent();
+        Response = await BoardService.AddAsync(AddBoardDTO);
+        AddBoardBtn.HideLoading();
+        await OnHideCreateBoardModallClick();
+        await ShowResponseModal();
+    }
+
+    /// <summary>
+    /// ShowResponseModal
+    /// </summary>
+    private async Task ShowResponseModal()
+    {
+        await ResponseModal.ShowAsync();
+    }
+
+    /// <summary>
+    /// OnShowCreateBoardModalClick
+    /// </summary>
+    /// <returns></returns>
+    private async Task OnShowCreateBoardModalClick()
+    {
+        AddBoardDTO = new();
+        await CreateBoardModal.ShowAsync();
+        await LoadEditorAsync();
+    }
+
+    /// <summary>
+    /// OnHideModalClick
+    /// </summary>
+    /// <returns></returns>
+    private async Task OnHideCreateBoardModallClick()
+    {
+        await CreateBoardModal.HideAsync();
+    }
+
+    /// <summary>
+    /// OnResponseModalHidden
+    /// </summary>
+    private void OnResponseModalHidden()
+    {
+        if (Response.Flag)
+        {
+            NavManager.NavigateTo($"/project?id={Response.Id}");
+        }
+    }
+
+    /// <summary>
+    /// OnHideResponseModalClick
+    /// </summary>
+    /// <returns></returns>
+    private void OnHideResponseModalClick()
+    {
+        NavManager.NavigateTo($"/project?id={Response.Id}");
+    }
+
+    /// <summary>
+    /// RedirectToWorkItems
+    /// </summary>
+    /// <param name="boardId"></param>
+    private void RedirectToWorkItems(Guid boardId)
+    {
+        NavManager.NavigateTo($"/tasks?projectid={boardId}");
+
+    }
+
+    /// <summary>
+    /// UsersDataProvider
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<AutoCompleteDataProviderResult<UserDTO>> UsersDataProvider(AutoCompleteDataProviderRequest<UserDTO> request)
+    {
+        var response = await UserService.GetListAsync(new UsersDTO()
+            {
+                SearchInput = request.Filter.Value,
+                Paging = new PagingDTO()
+                {
+                    Skip = 0,
+                    Take = 1000
+                }
+            });
+        return await Task.FromResult(new AutoCompleteDataProviderResult<UserDTO>
+            {
+                Data = response.Users.Where(_ => _.Role.Value.Equals(UserRoleConstants.ProjectManager)),
+                TotalCount = response.Total
+            });
+    }
+
+    /// <summary>
+    /// OnAssigneeChanged
+    /// </summary>
+    /// <param name="userDTO"></param>
+    private void OnAssigneeChanged(UserDTO userDTO)
+    {
+        if (userDTO is not null)
+        {
+            AddBoardDTO.AssigneeId = userDTO.Id;
+            AddBoardDTO.AssigneeName = userDTO.UserName;
+        }
+    }
+
+    /// <summary>
+    /// RedirectToWorkItems
+    /// </summary>
+    /// <param name="boardId"></param>
+    private void RedirectToDetail(Guid boardId)
+    {
+        NavManager.NavigateTo($"/project?id={boardId}");
+
+    }
+
+    #region
+    /// <summary>
+    /// DivEditorElement
+    /// </summary>
+    private ElementReference DivEditorElement;
+
+    /// <summary>
+    /// OnAfterRenderAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task LoadEditorAsync()
+    {
+        await js.InvokeAsync<string>(
+            "QuillFunctions.createQuill", DivEditorElement);
+    }
+
+    /// <summary>
+    /// GetEditorContent
+    /// </summary>
+    /// <returns></returns>
+    async Task<string> GetEditorContent()
+    {
+        return await js.InvokeAsync<string>(
+            "QuillFunctions.getQuillContent", DivEditorElement);
+    }
+    #endregion
+
+    /// <summary>
+    /// ShowSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void ShowSpinner()
+    {
+        PreloadService.Show(SpinnerColor.Light);
+    }
+
+    /// <summary>
+    /// HideSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void HideSpinner()
+    {
+        PreloadService.Hide();
+    }
+}

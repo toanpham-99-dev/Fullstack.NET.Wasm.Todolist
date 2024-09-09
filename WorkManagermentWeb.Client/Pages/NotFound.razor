@@ -1,0 +1,12 @@
+﻿@page "/not-found"
+@inject IStringLocalizer<Resource> localizer
+@using System.Diagnostics
+
+<PageTitle>@localizer["Not Found"]</PageTitle>
+
+<div class="row" style="margin:5px">
+    <div class="col">
+        <h4>@localizer["Status code 404"]</h4>
+        <p role="alert">@localizer["Your page you are looking for does not exist."]</p>
+    </div>
+</div>

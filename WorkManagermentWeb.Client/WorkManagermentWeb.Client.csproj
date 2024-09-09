@@ -1,0 +1,68 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <UserSecretsId>313cdb9e-e479-4d87-ab4f-030d3ad4ea61</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Remove="Pages\WorkItemManagerment - Copy.razor" />
+    <Content Remove="wwwroot\js\GanttVi.js" />
+    <Content Remove="wwwroot\js\toast.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <_ContentIncludedByDefault Remove="wwwroot\js\toast.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Properties\launchSettings.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Blazor.Bootstrap" Version="2.2.0" />
+    <PackageReference Include="BlazorDateRangePicker" Version="5.3.0" />
+    <PackageReference Include="Blazored.LocalStorage" Version="4.5.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="8.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.WebUtilities" Version="8.0.7" />
+    <PackageReference Include="Microsoft.Authentication.WebAssembly.Msal" Version="8.0.6" />
+    <PackageReference Include="Microsoft.Extensions.Localization" Version="8.0.6" />
+    <PackageReference Include="Microsoft.Graph" Version="5.56.0" />
+    <PackageReference Include="Microsoft.NET.ILLink.Analyzers" Version="7.0.100-1.23401.1" />
+    <PackageReference Include="NetcodeHub.Packages.Components.Validations" Version="1.0.1" />
+    <PackageReference Include="PusherClient" Version="2.2.1" />
+    <PackageReference Include="System.Net.Http.Json" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WorkManagermentWeb.Application\WorkManagermentWeb.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Pages\CreateWorkItem.razor" />
+    <None Include="wwwroot\js\Calendar.js" />
+    <None Include="wwwroot\js\GanttVi.js" />
+    <None Include="wwwroot\js\GanttEn.js" />
+    <None Include="wwwroot\js\Toast.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="Pages\Forbidden.razor">
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <Content Update="Pages\Unauthorized.razor">
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+    <Content Update="wwwroot\appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

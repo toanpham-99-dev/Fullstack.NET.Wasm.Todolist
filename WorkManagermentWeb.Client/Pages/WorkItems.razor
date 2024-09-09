@@ -1,0 +1,648 @@
+﻿@page "/tasks/"
+@inject IBoard BoardService
+@inject NavigationManager NavManager
+@inject IJSRuntime js
+@inject IWorkItem WorkItemService
+@inject IAuthService AuthService
+@inject IStringLocalizer<Resource> localizer
+@inject IUser UserService
+
+<div class="row" style="margin:5px">
+    <div class="col">
+        <h4>
+            <i class="fa  fa-list-ol"></i> &nbsp; @localizer["Tasks"] @if (ProjectId != Guid.Empty)
+            {
+                <span>
+                    /
+                    <a class="pe-auto" href="/project?id=@(Board.Id)">
+                        @Board.Name
+                    </a>
+                </span>
+            }
+        </h4>
+    </div>
+    <hr/>
+</div>
+
+<p>
+<div class="row mb-3">
+    <div class="col">
+        <div class="d-flex justify-content-start">
+                <Button Type="ButtonType.Button" Color="ButtonColor.Primary" Outline="true" @onclick="HandleCollapseAsync">
+                    <Icon Name="IconName.Filter" /> @localizer["Filter"]</Button>
+                <Button Type="ButtonType.Button" Color="ButtonColor.Danger" Outline="true" @onclick="ClearFilter" Style="@BtnStyle">
+                    ♺ @localizer["Reset Filter"]
+                </Button>
+        </div>
+    </div>
+</div>
+<div class="col-md-12 mb-3">
+    <Collapse @ref="Collapse">
+        <Card>
+            <CardBody>
+                <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="fw-bold">@localizer["Project"]</label>
+                                <select class="form-select" @bind="FilterRequest.BoardId" @bind:after="SelectChanged">
+                                    <option value="@Guid.Empty" hidden>@localizer["Choose Project"]</option>
+                                    @foreach (var board in Boards)
+                                    {
+                                        <option value=@board.Id>@board.Name</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                </div>
+                <div class="row">
+                        <div class="col">
+                            <div class="mb-3">
+                                <strong>@localizer["Box search"]</strong>
+                            </div>
+                            <div class="mb-3">
+                                <input type="text"
+                                    class="form-control"
+                                    placeholder="@localizer["Search"]"
+                                    step="any"
+                                    @bind-value:event="onchange"
+                                    @oninput="InputChanged"
+                                    @bind-value="FilterRequest.TitleOrDescription" />
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="mb-3">
+                                <strong>@localizer["Start Date"]</strong>
+                            </div>
+                            <div class="mb-3">
+                                <input type="date"
+                                       class="form-control"
+                                       @bind-value:event="onchange"
+                                       @oninput="DateChanged"
+                                       @bind-value="FilterRequest.StartDate" />
+                                <div class="mb-3">@localizer["Entered date"]: @FilterRequest.StartDate</div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="mb-3">
+                                <strong>@localizer["End Date"]</strong>
+                            </div>
+                            <div class="mb-3">
+                                <input type="date"
+                                       class="form-control"
+                                       @bind-value:event="onchange"
+                                       @oninput="DateChanged"
+                                       @bind-value="FilterRequest.EndDate" />
+                                <div class="mb-3">@localizer["Entered date"]: @FilterRequest.EndDate</div>
+                            </div>
+                        </div>
+                </div>
+                <div class="row">
+                    <div class="col">
+                        <div class="mb-3">
+                            <strong>@localizer["Assignee"] </strong>
+                            <AutoComplete @bind-Value="SelectedFilter.SelectedAssigneeName"
+                                          TItem="UserDTO"
+                                          DataProvider="UsersDataProvider"
+                                          PropertyName="@nameof(UserDTO.Email)"
+                                          Placeholder="@localizer["Assingee"]"
+                                          OnChanged="(UserDTO SelectedUser) => OnAssigneeChanged(SelectedUser)" />
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-3">
+                            <label class="fw-bold">@localizer["Creator"] </label>
+                            <AutoComplete @bind-Value="SelectedFilter.SeletedCreatorName"
+                                          TItem="UserDTO"
+                                          DataProvider="UsersDataProvider"
+                                          PropertyName="@nameof(UserDTO.Email)"
+                                          Placeholder="@localizer["Creator"]"
+                                          OnChanged="(UserDTO SelectedUser) => OnCreatorChanged(SelectedUser)" />
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-3">
+                            <label class="fw-bold">@localizer["Priority"]</label>
+                                <select class="form-select" @bind="FilterRequest.Priority" @bind:after="SelectChanged">
+                                <option selected="@(FilterRequest.Priority == null)" hidden>@localizer["Choose Priority"]</option>
+                                @foreach (var priority in SpecicalPropsInfo!.Priorities)
+                                {
+                                    <option value=@priority.Id>
+                                            @localizer[priority.Id.ToString()]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-3">
+                            <label class="fw-bold">@localizer["Category"]</label>
+                                <select class="form-select" @bind="FilterRequest.Type" @bind:after="SelectChanged">
+                                <option selected="@(FilterRequest.Type == null)" hidden>@localizer["Choose Category"]</option>
+                                @foreach (var category in SpecicalPropsInfo!.Categories)
+                                {
+                                    <option value=@category.Id>
+                                            @localizer[category.Id.ToString()]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="mb-3">
+                            <label class="fw-bold">@localizer["Status"]</label>
+                                <select class="form-select" @bind="FilterRequest.Status" @bind:after="SelectChanged">
+                                <option selected="@(FilterRequest.Status == null)" hidden>@localizer["Choose Status"]</option>
+                                @foreach (var status in SpecicalPropsInfo!.Statuses)
+                                {
+                                    <option value=@status.Id>
+                                            @localizer[status.Id.ToString()]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                    <Button Type="ButtonType.Button" Color="ButtonColor.Primary" Style="@ApplyFilterBtnStyle" Outline="true" @onclick="ApplyFilter">
+                        <Icon Name="IconName.FilterSquare" /> @localizer["Apply"]</Button>
+            </CardBody>
+        </Card>
+    </Collapse>
+</div>
+    <Grid TItem="WorkItemDTO"
+      AllowSorting="false"
+      Class="table table-hover table-bordered table-striped"
+      Data="WorkItemsResponse.WorkItems"
+      Responsive="true"
+      RowClass="GetRowClass">
+    <GridColumns>
+        <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Code"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+            SortKeySelector="item => item.Code">
+            @context.Code
+        </GridColumn>
+
+        <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Title"]" SortKeySelector="item => item.Title">
+                <p><a class="pe-auto" href="/task/@(context.Id)">
+                    @context.Title
+                </a></p>
+        </GridColumn>
+
+        <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Type"]" SortKeySelector="item => item.Type">
+                @localizer[context.Type.ToString()]
+
+        </GridColumn>
+
+        <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Status"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+        SortKeySelector="item => item.Status">
+            @if (context.Status == WorkItemStatus.Done)
+            {
+                <Badge Color="BadgeColor.Success" Class="p-2" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[context.Status.ToString()]
+                </Badge>
+            }
+            else if (context.Status == WorkItemStatus.Todo)
+            {
+                <Badge Color="BadgeColor.Secondary" Class="p-2" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[context.Status.ToString()]
+                </Badge>
+            }
+            else
+            {
+                <Badge Color="BadgeColor.Warning" Class="p-2" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[context.Status.ToString()]
+                </Badge>
+            }
+        </GridColumn>
+            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["SyncCalendar"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+                        SortKeySelector="item => item.IsSyncToCalendar">
+                @if (!context.IsSyncToCalendar)
+                {
+                    <Badge Color="BadgeColor.Secondary" Class="p-2" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer["NotSync"]
+                    </Badge>
+                }
+                else
+                {
+                    <Badge Color="BadgeColor.Success" Class="p-2" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer["Synced"]
+                    </Badge>
+                }
+            </GridColumn>
+        <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Start Date"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End"
+        SortKeySelector="item => item.StartDate">
+                @(context.StartDate is not null ? context.StartDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "")
+        </GridColumn>
+
+        <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["End Date"]" HeaderTextAlignment="Alignment.End" TextAlignment="Alignment.End"
+        SortKeySelector="item => item.EndDate">
+                @(context.EndDate is not null ? context.EndDate.Value.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) : "")
+        </GridColumn>
+
+        <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Assignee"]" SortKeySelector="item => item.AssigneeName">
+            @context.AssigneeName
+        </GridColumn>
+        <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Creator"]" SortKeySelector="item => item.CreatorName">
+            @context.CreatorName
+        </GridColumn>
+            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Priority"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center"
+            SortKeySelector="item => item.Priority">
+                @if (context.Priority == WorkItemPriority.DoItNow)
+                {
+                    <Badge Color="BadgeColor.Danger" Class="p-2" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[context.Priority.ToString()]
+                    </Badge>
+                }
+                else if (context.Priority == WorkItemPriority.Wont)
+                {
+                    <Badge Color="BadgeColor.Secondary" Class="p-2" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[context.Priority.ToString()]
+                    </Badge>
+                }
+                else
+                {
+                    <Badge Color="BadgeColor.Warning" Class="p-2" IndicatorType="BadgeIndicatorType.RoundedPill">
+                        @localizer[context.Priority.ToString()]
+                    </Badge>
+                }
+        </GridColumn>
+            <GridColumn TItem="WorkItemDTO" HeaderText="@localizer["Action"]" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+                <Button Color="ButtonColor.Primary" Outline="true" Size="Size.ExtraSmall" @onclick="()=>NavToUpdateTask(context.Id)">
+                    <Tooltip Title="@localizer["Edit Task"]" role="button">
+                        <Icon Name="IconName.Pencil"></Icon>
+                    </Tooltip>
+                </Button>
+        </GridColumn>
+    </GridColumns>
+</Grid>
+    <div class="row mb-3">
+        <div class="col">
+            <div class="d-flex justify-content-start">
+            </div>
+        </div>
+        <div class="col">
+            <div class="d-flex justify-content-end">
+                <Pagination Style="width: fit-content"
+                    ActivePageNumber="@CurrentPageNumber"
+                    TotalPages="@PageCount"
+                    DisplayPages="5"
+                    PageChanged="OnPageChangedAsync"
+                    FirstLinkIcon="IconName.ChevronDoubleLeft"
+                    PreviousLinkIcon="IconName.ChevronLeft"
+                    NextLinkIcon="IconName.ChevronRight"
+                    LastLinkIcon="IconName.ChevronDoubleRight" />
+            </div>
+        </div>
+    </div>
+</p>
+
+@code {
+    /// <summary>
+    /// PreloadService
+    /// </summary>
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    /// <summary>
+    /// ProjectId
+    /// </summary>
+    public Guid ProjectId;
+
+    /// <summary>
+    /// AssigneeId
+    /// </summary>
+    public string AssigneeId = string.Empty;
+
+    /// <summary>
+    /// Board
+    /// </summary>
+    private BoardDTO Board = new();
+
+    /// <summary>
+    /// Boards
+    /// </summary>
+    private List<BoardDTO> Boards = new List<BoardDTO>();
+
+    /// <summary>
+    /// SelectedFilter
+    /// </summary>
+    private WorkItemSelectedFilter SelectedFilter = new();
+
+    /// <summary>
+    /// FilterRequest
+    /// </summary>
+    private WorkItemFilterDTO FilterRequest = new();
+
+    /// <summary>
+    /// TempFilterRequest
+    /// </summary>
+    private WorkItemFilterDTO TempFilterRequest = new();
+
+    /// <summary>
+    /// WorkItemsResponse
+    /// </summary>
+    private GetWorkItemsResponse WorkItemsResponse = new(0, new List<WorkItemDTO>());
+
+    /// <summary>
+    /// SpecicalPropsInfo
+    /// </summary>
+    private GetPropertiesInfoResponse? SpecicalPropsInfo;
+
+    /// <summary>
+    /// Collapse
+    /// </summary>
+    private Collapse Collapse = default!;
+
+    /// <summary>
+    /// IsShowedFilters
+    /// </summary>
+    private bool IsShowedFilters;
+
+    /// <summary>
+    /// BtnStyle
+    /// </summary>
+    private string BtnStyle = "visibility:hidden";
+
+    /// <summary>
+    /// ApplyFilterBtnStyle
+    /// </summary>
+    private string ApplyFilterBtnStyle = "visibility:hidden";
+
+    /// <summary>
+    /// CurrentPageNumber
+    /// </summary>
+    private int CurrentPageNumber = 1;
+
+    /// <summary>
+    /// AmountPerPage
+    /// </summary>
+    private int AmountPerPage = 8;
+
+    /// <summary>
+    /// PageCount
+    /// </summary>
+    private int PageCount = 0;
+
+    /// <summary>
+    /// HandlePageCount
+    /// </summary>
+    /// <returns></returns>
+    private void HandlePageCount()
+    {
+        int temp = WorkItemsResponse.Total / AmountPerPage;
+        if (temp * AmountPerPage != WorkItemsResponse.Total) temp += 1;
+        PageCount = temp;
+    }
+
+    /// <summary>
+    /// ApplyFilter
+    /// </summary>
+    /// <returns></returns>
+    private async Task ApplyFilter()
+    {
+        CurrentPageNumber = 1;
+        WorkItemsResponse = await WorkItemService.GetListAsync(FilterRequest);
+        HandlePageCount();
+        BtnStyle = string.Empty;
+    }
+
+    /// <summary>
+    /// ClearFilter
+    /// </summary>
+    private void ClearFilter()
+    {
+        FilterRequest = new();
+        FilterRequest.Paging.Take = AmountPerPage;
+        SelectedFilter = new();
+        BtnStyle = "visibility:hidden";
+        ApplyFilterBtnStyle = "visibility:hidden";
+    }
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            NavManager.NavigateTo("/login");
+            return;
+        }
+
+        ShowSpinner();
+        GetQueryString();
+        ClearFilter();
+        SpecicalPropsInfo = WorkItemService.GetSpecicalPropertiesInfo();
+        if (ProjectId != Guid.Empty)
+        {
+            await GetBoardAsync();
+        }
+        await GetBoardsAsync();
+        FilterRequest.Paging.Take = AmountPerPage;
+        FilterRequest.BoardId = ProjectId;
+        FilterRequest.OwnerId = AssigneeId;
+        WorkItemsResponse = await WorkItemService.GetListAsync(FilterRequest);
+        HandlePageCount();
+        ApplyFilterBtnStyle = "visibility:hidden";
+        HideSpinner();
+    }
+
+    /// <summary>
+    /// GetQueryString
+    /// </summary>
+    private void GetQueryString()
+    {
+        NavManager.TryGetQueryString<Guid>(nameof(ProjectId), out ProjectId);
+        NavManager.TryGetQueryString<string>(nameof(AssigneeId), out AssigneeId);
+    }
+
+    /// <summary>
+    /// GetBoardsAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetBoardsAsync()
+    {
+        GetBoardsResponse response = await BoardService.GetListAsync(new GetBoardsDTO());
+        Boards.AddRange(response.Boards);
+    }
+
+    /// <summary>
+    /// GetBoardAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task GetBoardAsync()
+    {
+        GetBoardResponse response = await BoardService.GetByIdAsync(ProjectId);
+        if (response.Flag)
+        {
+            Board = response.BoardDTO!;
+        }
+    }
+
+    /// <summary>
+    /// UsersDataProvider
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<AutoCompleteDataProviderResult<UserDTO>> UsersDataProvider(AutoCompleteDataProviderRequest<UserDTO> request)
+    {
+        var response = await UserService.GetListAsync(new UsersDTO()
+        {
+            SearchInput = request.Filter.Value,
+            Paging = new PagingDTO()
+            {
+                Skip = 0, Take = 1000
+            }
+        });
+        return await Task.FromResult(new AutoCompleteDataProviderResult<UserDTO> { Data = response.Users, TotalCount = response.Total });
+    }
+
+    /// <summary>
+    /// OnAssigneeChanged
+    /// </summary>
+    /// <param name="userDTO"></param>
+    private void OnAssigneeChanged(UserDTO userDTO)
+    {
+        ApplyFilterBtnStyle = string.Empty;
+        if (userDTO is not null)
+        {
+            SelectedFilter.SelectedAssigneeName = userDTO.FullName;
+            FilterRequest.OwnerId = userDTO.Id;
+        }
+    }
+
+    /// <summary>
+    /// OnCreatorChanged
+    /// </summary>
+    /// <param name="userDTO"></param>
+    private void OnCreatorChanged(UserDTO userDTO)
+    {
+        ApplyFilterBtnStyle = string.Empty;
+        if (userDTO is not null)
+        {
+            SelectedFilter.SeletedCreatorName = userDTO.FullName;
+            FilterRequest.CreatedBy = userDTO.Id;
+        }
+    }
+
+    /// <summary>
+    ///GetRowClass
+    /// </summary>
+    /// <param name="workItem"></param>
+    /// <returns></returns>
+    private string GetRowClass(WorkItemDTO workItem)
+    {
+        if (workItem.Status != WorkItemStatus.Done && workItem.Priority == WorkItemPriority.DoItNow)
+            return "align-middle table-danger";
+        else if (workItem.Status == WorkItemStatus.Done)
+            return "align-middle table-success";
+        return "align-middle table-warning";
+    }
+
+    /// <summary>
+    /// WorkItemsDataProvider
+    /// </summary>
+    /// <param name="request"></param>
+    /// <returns></returns>
+    private async Task<GridDataProviderResult<WorkItemDTO>> WorkItemsDataProvider(GridDataProviderRequest<WorkItemDTO> request)
+    {
+        WorkItemsResponse = await WorkItemService.GetListAsync(FilterRequest);
+        return await Task.FromResult(request.ApplyTo(WorkItemsResponse.WorkItems!));
+    }
+
+    /// <summary>
+    /// HandleCollapseAsync
+    /// </summary>
+    /// <returns></returns>
+    private async Task HandleCollapseAsync()
+    {
+        IsShowedFilters = !IsShowedFilters;
+        if (!IsShowedFilters)
+            await Collapse.HideAsync();
+        else
+            await Collapse.ShowAsync();
+    }
+
+    /// <summary>
+    /// OnPageChangedAsync
+    /// </summary>
+    /// <param name="newPageNumber"></param>
+    /// <returns></returns>
+    private async Task OnPageChangedAsync(int newPageNumber)
+    {
+        await Task.Run(async () => 
+        {
+            CurrentPageNumber = newPageNumber;
+            FilterRequest.Paging.Skip = (CurrentPageNumber - 1) * AmountPerPage;
+            WorkItemsResponse = await WorkItemService.GetListAsync(FilterRequest);
+            HandlePageCount();
+        });
+    }
+
+    /// <summary>
+    /// NavToUpdateTask
+    /// </summary>
+    /// <param name="taskId"></param>
+    private void NavToUpdateTask(Guid taskId)
+    {
+        string url = $"/task/{taskId}?editmode=true";
+        NavManager.NavigateTo(url);
+    }
+
+    /// <summary>
+    /// InputChanged
+    /// </summary>
+    private void InputChanged(ChangeEventArgs args)
+    {
+        TempFilterRequest = new();
+        TempFilterRequest.TitleOrDescription = args.Value?.ToString();
+        if (!string.IsNullOrEmpty(TempFilterRequest.TitleOrDescription))
+        {
+            ApplyFilterBtnStyle = string.Empty;
+        }
+        else if (TempFilterRequest == new WorkItemFilterDTO())
+        {
+            ApplyFilterBtnStyle = "visibility:hidden";
+        }
+    }
+
+    /// <summary>
+    /// SelectChanged
+    /// </summary>
+    private void SelectChanged()
+    {
+        ApplyFilterBtnStyle = string.Empty;
+    }
+
+    /// <summary>
+    /// DateChanged
+    /// </summary>
+    private void DateChanged(ChangeEventArgs args)
+    {
+        if (args.Value is not null && !String.IsNullOrEmpty(args.Value.ToString()))
+        {
+            ApplyFilterBtnStyle = string.Empty;
+        }
+        else
+        {
+            //args.Value = FilterRequest.StartDate;
+            ApplyFilterBtnStyle = "visibility:hidden";
+        }
+    }
+
+    /// <summary>
+    /// ShowSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void ShowSpinner()
+    {
+        PreloadService.Show(SpinnerColor.Light);
+    }
+
+    /// <summary>
+    /// HideSpinner
+    /// </summary>
+    /// <returns></returns>
+    private void HideSpinner()
+    {
+        PreloadService.Hide();
+    }
+}

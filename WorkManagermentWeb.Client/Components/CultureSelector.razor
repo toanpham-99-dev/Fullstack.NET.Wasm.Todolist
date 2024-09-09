@@ -1,0 +1,54 @@
+﻿@using Blazored.LocalStorage
+@using Microsoft.AspNetCore.Components;
+@using Microsoft.JSInterop;
+@using System.Globalization;
+@inject NavigationManager NavManager
+@inject IStringLocalizer<Resource> localizer
+@inject IJSRuntime IJSRuntime
+@inject ILocalStorageService localStorageService
+
+<select class="form-control" @bind="Culture" style="width:122px; margin-left:21px; height: 37px;">
+    <option value="@Cultures[0]">
+        @localizer["En"]
+    </option>
+    <option value="@Cultures[1]">
+        @localizer["Vi"]
+    </option>
+</select>
+
+@code {
+    /// <summary>
+    /// Cultures
+    /// </summary>
+    CultureInfo[] Cultures = new[]
+    {
+        new CultureInfo("en-US"),
+        new CultureInfo("vi-VN")
+    };
+
+    /// <summary>
+    /// Culture
+    /// </summary>
+    CultureInfo Culture
+    {
+        get => CultureInfo.CurrentCulture;
+        set
+        {
+            if (CultureInfo.CurrentCulture != value)
+            {
+                string redirect = NavManager.Uri;
+                var js = (IJSInProcessRuntime)IJSRuntime;
+                localStorageService.SetItemAsStringAsync("culture", value.Name);
+
+                if (NavManager.Uri.Contains("culture"))
+                {
+                    string newCul = value.Name;
+                    string oldCul = Cultures.FirstOrDefault(_ => _.Name != newCul)!.Name;
+                    redirect = NavManager.Uri.Replace(oldCul, newCul);
+
+                }
+                NavManager.NavigateTo(redirect, true);
+            }
+        }
+    }
+}

@@ -1,0 +1,12 @@
+﻿@page "/forbidden"
+@inject IStringLocalizer<Resource> localizer
+@using System.Diagnostics
+
+<PageTitle>@localizer["Forbidden"]</PageTitle>
+
+<div class="row" style="margin:5px">
+    <div class="col">
+        <h4>@localizer["Status code 403 - Forbidden"]</h4>
+        <p role="alert">@localizer["You dont have permission to access this request."]</p>
+    </div>
+</div>

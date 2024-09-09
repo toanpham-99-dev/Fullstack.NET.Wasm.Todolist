@@ -1,0 +1,220 @@
+﻿@page "/register"
+@using WorkManagermentWeb.Application.Contracts
+@using WorkManagermentWeb.Application.DTOs
+@inject NavigationManager NavManager
+@inject IStringLocalizer<Resource> localizer
+@inject IUser UserService
+@inject IJSRuntime js
+
+<div class="container" style="min-height:845px; width:377px">
+    <div class="row">
+        <div class="col">
+            <EditForm  EditContext="@EditContext" OnValidSubmit="HandleRegistration" Enhance>
+                <DataAnnotationsValidator />
+            <div class="card">
+                    <div class="card-header"><p class="mt-3 fw-bold text-center">@localizer["Sign up to continue"]</p></div>
+                <div class="card-body">
+                    <div class="form-group mb-3 mt-3">
+                            <FloatingText @bind-Value="User.FullName"
+                                  class="form-control"
+                                  Type="text"
+                                  Placeholder="@localizer["Full Name"]"
+                                  Label="@localizer["Full Name"]" />
+                            <ValidationMessage For="()=>User.FullName" />
+                    </div>
+                    <div class="form-group mb-3">
+                        <FloatingText @bind-Value="User.UserName"
+                                      class="form-control"
+                                      Type="text"
+                                      Placeholder="@localizer["Username"]"
+                                      Label="@localizer["Username"]" />
+                        <ValidationMessage For="()=>User.UserName" />
+                    </div>
+                    <div class="form-group mb-3">
+                        <FloatingText @bind-Value="User.Email"
+                                      class="form-control"
+                                      Type="email"
+                                      Placeholder="Email"
+                                      Label="Email" />
+                        <ValidationMessage For="()=>User.Email" />
+                    </div>
+                    <div class="form-group mb-3">
+                        <FloatingText @bind-Value="User.Phone"
+                                      class="form-control"
+                                      Type="text"
+                                      Placeholder="@localizer["Phone Number"]"
+                                      Label="@localizer["Phone Number"]" />
+                        <ValidationMessage For="()=>User.Phone" />
+                    </div>
+                    <div class="form-group mb-3">
+                        <FloatingText class="form-control"
+                                      Type="@(ShowPassword is true? "text":"password")"
+                                      @bind-Value="User.Password"
+                                      Placeholder="@localizer["Password"]"
+                                      Label="@localizer["Password"]">
+                        </FloatingText>
+                        <ValidationMessage For="()=>User.Password" />
+                    </div>
+                    <div class="form-group mb-3">
+                        <FloatingText class="form-control"
+                                      Type="@(ShowPassword is true? "text":"password")"
+                                      @bind-Value="User.ConfirmPassword"
+                                      Placeholder="@localizer["Confirm Password"]"
+                                      Label="@localizer["Confirm Password"]">
+                        </FloatingText>
+                            <ValidationMessage For="()=>User.ConfirmPassword" />
+                        </div>
+                    @* <div class="mb-3">
+                        <input class="form-check-input"
+                               style="height:17px; width:17px"
+                               type="checkbox"
+                               checked=@ShowPassword
+                               @onchange="eventArgs => { ShowPasswordCheckboxClicked(eventArgs.Value!); }">
+                        <label class="ms-1 fw-bold" style="margin-top: 1px">@localizer["Show Password"]</label>
+                    </div> *@
+
+                    <div class="form-group">
+                        <div class="d-grid gap-2 mb-3">
+                            <Button @ref="SignUpBtn" Class="btn btn-primary"
+                                    Type="ButtonType.Submit">
+                                <Icon Name="IconName.PersonAdd" /> @localizer["Register"]
+                            </Button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <p class="text-center"><a class="pe-auto" href="/login">@localizer["Already have an account? Log in"]</a></p>
+                    </div>
+                </div>
+            </div>
+            </EditForm>
+        </div>
+    </div>
+</div>
+<Modal @ref="Modal" OnHidden="OnModalHidden" Title="⚠ Redmine2.0">
+    <BodyTemplate>
+        @localizer[Response.Message]
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">✖ @localizer["Close"]</Button>
+    </FooterTemplate>
+</Modal>
+@code {
+    /// <summary>
+    /// MyApp
+    /// </summary>
+    [CascadingParameter] public App MyApp { get; set; } = new();
+
+    /// <summary>
+    /// SignUpBtn
+    /// </summary>
+    private Button SignUpBtn = default!;
+
+    /// <summary>
+    /// ShowPassword
+    /// </summary>
+    private bool ShowPassword;
+
+    /// <summary>
+    /// User
+    /// </summary>
+    private RegisterUserDTO User = new();
+
+    /// <summary>
+    /// EditContext
+    /// </summary>
+    private EditContext EditContext = new(new RegisterUserDTO());
+
+    /// <summary>
+    /// Response
+    /// </summary>
+    private RegistrationResponse Response = new(false, string.Empty);
+
+    /// <summary>
+    /// Modal
+    /// </summary>
+    private Modal Modal = default!;
+
+    /// <summary>
+    /// OnInitializedAsync
+    /// </summary>
+    /// <returns></returns>
+    protected override void OnInitialized()
+    {
+        MyApp.SetLayout(typeof(EmptyLayout));
+
+        User.RoleName = UserRoleConstants.Member;
+        SetUpEditContext();
+    }
+
+    /// <summary>
+    /// SetUpEditContext
+    /// </summary>
+    private void SetUpEditContext()
+    {
+        EditContext = new EditContext(User);
+        EditContext.OnFieldChanged += HandleFieldChanged!;
+    }
+
+    /// <summary>
+    /// HandleFieldChanged
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="e"></param>
+    private void HandleFieldChanged(object sender, FieldChangedEventArgs e)
+    {
+        EditContext.Validate();
+    }
+
+    /// <summary>
+    /// OnShowModalClick
+    /// </summary>
+    /// <returns></returns>
+    private async Task OnShowModalClick()
+    {
+        await Modal.ShowAsync();
+    }
+
+    /// <summary>
+    /// OnModalHidden
+    /// </summary>
+    private void OnModalHidden()
+    {
+        string redirectUrl = Response!.Flag ? "/login" : "/register";
+        NavManager.NavigateTo(redirectUrl);
+    }
+
+    /// <summary>
+    /// OnHideModalClick
+    /// </summary>
+    /// <returns></returns>
+    private async Task OnHideModalClick()
+    {
+        await Modal.HideAsync();
+    }
+
+    /// <summary>
+    /// HandleRegistration
+    /// </summary>
+    /// <returns></returns>
+    private async Task HandleRegistration()
+    {
+        SignUpBtn.ShowLoading(@localizer["Loading..."]);
+        Response = await UserService.RegisterAsync(User);
+        if (Response.Flag)
+        {
+            User = new();
+            await OnShowModalClick();
+            return;
+        }
+
+        await OnShowModalClick();
+        SignUpBtn.HideLoading();
+        return;
+    }
+
+    /// <summary>
+    /// ShowPasswordCheckboxClicked
+    /// </summary>
+    /// <param name="isCheck"></param>
+    private void ShowPasswordCheckboxClicked(object isCheck) => ShowPassword = !ShowPassword;
+}
